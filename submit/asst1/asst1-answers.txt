@@ -1,0 +1,163 @@
+Step 4
+4.1 
+sys161: System/161 release 2.0.3, compiled Sep 17 2022 09:27:01
+
+OS/161 base system version 1.99.08
+Copyright (c) 2000, 2001-2005, 2008-2011, 2013, 2014
+   President and Fellows of Harvard College.  All rights reserved.
+
+Put-your-group-name-here's system version 0 (DUMBVM #1)
+
+292k physical memory available
+Device probe...
+lamebus0 (system main bus)
+emu0 at lamebus0
+ltrace0 at lamebus0
+ltimer0 at lamebus0
+beep0 at ltimer0
+rtclock0 at ltimer0
+lrandom0 at lamebus0
+random0 at lrandom0
+lhd0 at lamebus0
+lhd1 at lamebus0
+lser0 at lamebus0
+con0 at lser0
+
+cpu0: MIPS/161 (System/161 2.x) features 0x0
+OS/161 kernel [? for menu]: 
+
+4.2 
+commit 5eef80fa594aab6e64132b6d93584a033cec3c9f (HEAD -> master, tag: asst1-start, origin/master, origin/HEAD)
+Author: Leonardo Kamino <leo.kamino@gmail.com>
+Date:   Tue Sep 12 00:11:09 2023 -0400
+
+    Initial commit of os161 for CPEN331
+
+4.3
+asst1-start
+
+Step 5. Complete the code reading exercises
+Question 1: 
+Depending on the exception either `mips_utlb_handler` or `mips_general_handler` is executed when a trap occurs. Then the control get's transfered to `common_exception` that later jumps to `mips_trap()` located in `src/kern/arch/mips/locore/trap.c`.
+Interrupt is a type of Trap therefore the execution is very similar to the above only differing during the execution of `mips_trap()`, where it checks if it is an interrupt and runs the interrupt handler.
+
+Question 2:
+The code in OS/161 that invokes system calls from user programs and causes traps is in line 84 of file os161/src/userland/lib/libc/arch/mips/syscalls-mips.S
+
+Question 3:
+I suppose we have libc functions both in the common part of the source tree and in the userland part to have a more clear separation between the kernal and user level programs. The libc functions in the common part would be functions needed for both the kernel and userland appplications. And userland libc would be specific for user programs, where the code could be added/modified to meet the requirements for the user programs without affecting kernel-level programs by adding complexity to it.
+
+Question 4:
+The configure file is responsible for creating the defs.mk file that holds hod all the makefile definitions needed to adjust the OS/161 build process to any particular environment. The definitions that configure configures include OSTREE (The root directory you run OS/161 in) and PLATFORM (The type of system we're building for.)\
+You might need/want to rerun it if you start working on a different host OS, than the one you first runned the script.
+
+Question 5:
+A function is machine dependent when it contains code or bahaviour that are specific for the underlying computer acrchitecture, it could include accessing/manipulating hardware registers, endianess of the machine, architecture specific assembly code, and more. 
+It is important to maintain the separation between machine dependent and independent code for multiple reasons, such as being able to reuse independent code for different hardware, and facilitate to debug, improve performance and perform updates for hardware specific situations.
+
+Question 6:
+The trapframe is 37 x uint32_t large. This can be found in `src/kern/arch/mips/include/trapframe.h`, it is this size so it can store all the mips register (state of a process) when an exception or an interrupt occurs.
+
+Question 7:
+kern/conf/config script is responsible for configuring the kernel, therefore you should rerun it whenever modifying conf.kern, or removing and adding files from the kernel source tree.
+
+Question 8:
+bmake depend should be run in kern/compile/DUMBVM after running kern/conf/config or after modifying the header files in the kernel source tree.
+
+Question 9:
+These commands should be run after running the config script and bmake depend, or  whenever you made changes to the kernel source code. bmake will compile the files creating the binaries and make install copy the compiled files into the correct locations so that they can be accessed.
+
+Question 10:
+In order to implement this function I would have to modify the file src/kern/main/menu.c in the followin manner:
+    1 - Implement the following function around line 335
+        static
+        int
+        cmd_hello(){
+            kprintf("Hello world!\n");
+            return 0;
+        }
+    2 - Add following line inside *opsmenu[] so user can see the option of running this commend when inputting ?o
+	    "[hello]   Print Hello World!        ",
+    3 - Add following line to cmdtable[], so it knows which command to run when user ask for command "hello"
+        { "hello",  cmd_hello},
+
+Question 11:
+We need to include these since OS161 is running in a virtual machine, that is running on another machine, therefore OS161 does not have access to these utitlities from the host machine.
+
+Question 12:
+When user program exits we move its return value into s0 (which is calle-save) so we still have it in case exit() returns, we also store the return value into register a0 so it can be used as an argument of exit()
+
+Question 13:
+In order to add a new syscall we should modify/add the following code:
+    1 - Create file newsyscall_syscalls.c in src/kern/syscall 
+    2 - Create your syscall function sys__newsyscall() inside the new created file.
+    3 - Define  the syscall number SYS_newsyscall for your new syscall in src/kern/include/kern/syscall.h
+    4 - Add function prototype for sys__newsyscall in src/kern/include/syscall.h
+    5 - Add case statement SYS__newsyscall inside switch of syscall() function in src/kern/arch/mips/syscall/syscall.c
+In order to test the new syscall you must run all the commands since new files were added and headers modified so we should run kern/conf/config script, and bmake depend, bmake and bmake install in kern/compile/DUMBVM.
+
+Step 7 - Trace the execution from start to menu():
+
+Question 14:
+The very first function that executes when 0S161 starts is __start() at ../../arch/sys161/main/start.S:54
+
+Question 15:
+addiu sp, sp, -24
+
+Question 16:
+(gdb) maint info breakpoint
+Num     Type           Disp Enb Address    What
+-2      longjmp master keep n   0x8002c844 <longjmp> inf 1
+1       breakpoint     keep y   0x800139e4 in kmain at ../../main/main.c:211 inf 1
+2       breakpoint     keep y   0x80014a48 in menu at ../../main/menu.c:706 inf 1
+
+Question 17:
+Between the beggining of execution and kernel main multiple things are done, including defining the stack pointer, setting up memory by creating the first page and copying the exception handler code onto it, initializting the TLB(Translation Lookaside Buffer), set up status register,  Load the CPU number into the PTBASE field of the CONTEXT register and load the GP register
+
+Question 18:
+jal kmain
+
+Question 19:
+These functions are being called in the early initialization
+(gdb) n
+109             ram_bootstrap();
+(gdb) n
+110             proc_bootstrap();
+(gdb) n
+111             thread_bootstrap();
+(gdb) n
+112             hardclock_bootstrap();
+(gdb) n
+113             vfs_bootstrap();
+(gdb) n
+114             kheap_nextgeneration();
+
+Question 20:
+(gdb) p *bootcpu
+Cannot access memory at address 0x80000
+
+Question 21:
+(gdb) p *bootcpu
+$2 = {c_self = 0x8003af00, c_number = 0, c_hardware_number = 0, c_curthread = 0x8003bf80, c_zombies = {tl_head = {tln_prev = 0x0, tln_next = 0x8003af1c, 
+      tln_self = 0x0}, tl_tail = {tln_prev = 0x8003af10, tln_next = 0x0, tln_self = 0x0}, tl_count = 0}, c_hardclocks = 0, c_spinlocks = 0, c_isidle = false, 
+  c_runqueue = {tl_head = {tln_prev = 0x0, tln_next = 0x8003af44, tln_self = 0x0}, tl_tail = {tln_prev = 0x8003af38, tln_next = 0x0, tln_self = 0x0}, tl_count = 0}, 
+  c_runqueue_lock = {splk_lock = 0, splk_holder = 0x0}, c_ipi_pending = 0, c_shootdown = {{ts_placeholder = 0} <repeats 16 times>}, c_numshootdown = 0, c_ipi_lock = {
+    splk_lock = 0, splk_holder = 0x0}}
+
+Question 22:
+(gdb) cpuarray allcpus
+0 cpus
+
+Question 23:
+(gdb) cpuarray allcpus
+1 cpus
+cpu 0:
+$1 = {c_self = 0x8003af00, c_number = 0, c_hardware_number = 0, c_curthread = 0x8003bf80, c_zombies = {tl_head = {tln_prev = 0x0, tln_next = 0x8003af1c, 
+      tln_self = 0x0}, tl_tail = {tln_prev = 0x8003af10, tln_next = 0x0, tln_self = 0x0}, tl_count = 0}, c_hardclocks = 1, c_spinlocks = 0, c_isidle = false, 
+  c_runqueue = {tl_head = {tln_prev = 0x0, tln_next = 0x8003af44, tln_self = 0x0}, tl_tail = {tln_prev = 0x8003af38, tln_next = 0x0, tln_self = 0x0}, tl_count = 0}, 
+  c_runqueue_lock = {splk_lock = 0, splk_holder = 0x0}, c_ipi_pending = 0, c_shootdown = {{ts_placeholder = 0} <repeats 16 times>}, c_numshootdown = 0, c_ipi_lock = {
+    splk_lock = 0, splk_holder = 0x0}}
+
+
+
+
