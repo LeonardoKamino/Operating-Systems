@@ -1,0 +1,43 @@
+Question 1: What happens to a thread when it exits (i.e., calls thread_exit())? What about when it sleeps?
+
+When a thread exits, it calls thread_exit() inside src/kern/thread/thread.c. Inside this function the thread is detached from its process, check if we overflowed the thread stack at some point, disables the interrupts for this processor, and sets the thread state to ZOMBIE
+When a thread sleep, it calls wchan_sleep inside src/kern/thread/thread.c. In this function it checks if the thread is not in a interrup handler, check if it only holds the spinlock of the associated wait channel and no other locks, than it calls thread-switch to add the thread in queue of threads to be awaken. Upun added to the list, the lock is released.
+
+Question 2: What function(s) handle(s) a context switch?
+
+The function that handle context switch is thread_switch in 'src/kern/thread/thread.c'
+
+Question 3: What does it mean for a thread to be in each of the possible thread states?
+
+S_RUN: thread is running currently
+S_READY: thread is ready to be run, it is in the running queue
+S_SLEEP: thread is at sleep and in the waiting channel, waiting to be awaken
+S_ZOMBIE: thread was exited however has not yet been fully removed from the system, as some of its information could be useful for some process.
+
+Question 4: What does it mean to turn interrupts off? How is this accomplished? Why is it important to turn off interrupts in the thread subsystem code?
+
+Turn interrupts off means disabling hardware interrupts so the running code is not stopped by them, this can be accomplished by calling the function splhigh(). It is important to turn off interrupts in the thread subsystem especially when during context switches, since the switch must happen atomically, we have to block interupts from happening so the cpu does not interrupt it, what could cause undesirable and undefined behaviour such as threads not switching to its new state, threads that never exit, never wake up, or are not properlly cleaned up.
+
+Question 5: What happens when a thread wakes up another thread? How does a sleeping thread get to run again?
+
+A thread can wake up other thread by calling either wchan_wakeone (wake only one thread) or wchan_wakeall (wake all threads in wait channel). In either scenarios the thread wake another thread by calling  `thread_make_runnable(target_thread, false);`. Inside this function we acquire the spinlock for the run queue of the target cpu of the target thread. Then we set the target thread state to S_READY, to demonstrate that it is ready to be schedule and executed, and add it to the target cpu run queue. We make sure that if the target cpu is idle we send an interrupt to make it unidle, and finally release the target cpu run queue spinlock.
+
+Question 6: What function(s) choose(s) the next thread to run?
+
+The function `thread_switch` in `src/kern/thread/thread.c` choose the next thread to run.
+
+Question 7: How does it (do they) pick the next thread?
+
+The function `thread_switch` pick the next thread by calling the function `threadlist_remhead(&curcpu->c_runqueue)` on line 642
+
+Question 8: What role does the hardware timer play in scheduling? What hardware independent function is called on a timer interrupt?
+
+Hardware timer is responsible for send timer interrupts at regular intervals prompting the computer to switch between tasks and ensure fairness in sharing its time. "hardclock()" from src/kern/thread/clock.c is called on a timer interrupt.
+
+Question 9: Describe how wchan_sleep() and wchan_wakeone() are used to implement semaphores.
+
+Semaphores are declared in the file `src/kern/thread/synch.c` and  we initialize a sem_count variable that is how a semaphore knows if it can be acquired or not, if 0 it cannot be acquired if positive it can be acquired. The function P is the function declared to try to acquire a semaphore, in this situation we need to check if the semaphore is available to be acquired, if not we use the wchan_sleep() to put the current thread to sleep and wait for when the semaphore is available. We also have the function V that is used to release the semaphore, and within this function we call  wchan_wakeone() to wake up any treads that are waiting to acquire the semaphore and were put to sleep inside by wchan_sleep() inside function P.
+
+Question 10:How does the implementation of wchan ensure that a thread never misses a wakeup signal: that another thread cannot attempt to awaken the first thread just as it is preparing to sleep, but before it is actually placed into the sleep queue?
+
+Wchan ensure that by using spinlocks. It make sure that before starting putting a thread to sleep the thread must have the semaphore spinlock, releasing it only after the thread is in the sleeping queue. And, it also ensures that the thread trying to wake up other threads also holds the semaphore spinlock during the procedure of waking up other threads. And since two threads cannot hold the same spinlock at the same time, a thread will not be able to try to awake another thread when the other is preparing to sleep, but before it is actually placed into the sleep queue.
