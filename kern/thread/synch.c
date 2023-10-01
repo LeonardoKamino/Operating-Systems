@@ -165,8 +165,6 @@ lock_create(const char *name)
         lock->lk_flag = false;
         lock->lk_holder_thread = NULL;
 
-        // add stuff here as needed
-
         return lock;
 }
 
@@ -175,7 +173,6 @@ lock_destroy(struct lock *lock)
 {
         KASSERT(lock != NULL);
 
-        // add stuff here as needed
         spinlock_cleanup(&lock->lk_spinlock);
         wchan_destroy(lock->lk_wchan);
         kfree(lock->lk_name);
@@ -185,7 +182,6 @@ lock_destroy(struct lock *lock)
 void
 lock_acquire(struct lock *lock)
 {
-        // Write this
         KASSERT(lock != NULL);
         /*
          * May not block in an interrupt handler.
@@ -208,16 +204,12 @@ lock_acquire(struct lock *lock)
 void
 lock_release(struct lock *lock)
 {
-        // Write this
         KASSERT(lock != NULL);
 
         spinlock_acquire(&lock->lk_spinlock);
 
         lock->lk_flag = false;
-        KASSERT(lock->lk_flag == false);
         lock->lk_holder_thread = NULL;
-        KASSERT(lock->lk_holder_thread == NULL);
-
         wchan_wakeone(lock->lk_wchan, &lock->lk_spinlock);
 
         spinlock_release(&lock->lk_spinlock);
@@ -226,7 +218,6 @@ lock_release(struct lock *lock)
 bool
 lock_do_i_hold(struct lock *lock)
 {
-        // Write this
         KASSERT(lock != NULL);
 
         spinlock_acquire(&lock->lk_spinlock);
@@ -266,8 +257,6 @@ cv_create(const char *name)
 
         spinlock_init(&cv->cv_spinlock);
 
-        // add stuff here as needed
-
         return cv;
 }
 
@@ -276,7 +265,6 @@ cv_destroy(struct cv *cv)
 {
         KASSERT(cv != NULL);
 
-        // add stuff here as needed
         spinlock_cleanup(&cv->cv_spinlock);
         wchan_destroy(cv->cv_wchan);
 
@@ -287,17 +275,18 @@ cv_destroy(struct cv *cv)
 void
 cv_wait(struct cv *cv, struct lock *lock)
 {
-        // Write this
         KASSERT(cv != NULL);
         KASSERT(lock_do_i_hold(lock));
 
         spinlock_acquire(&cv->cv_spinlock);
-
+        
+        //make sure to release lock before going to sleep
         lock_release(lock);
         wchan_sleep(cv->cv_wchan, &cv->cv_spinlock);
 
         spinlock_release(&cv->cv_spinlock);
 
+        //make sure to acquire the lock after being awaken
         lock_acquire(lock);
 }
 
