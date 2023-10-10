@@ -28,13 +28,13 @@ struct stake{
 	volatile int stake_rope;
 };
 
-static struct rope *ropes;
-static struct stake *stakes;
-static struct hook *hooks;
+struct rope *ropes;
+struct stake *stakes;
+struct hook *hooks;
 
 /* Synchronization primitives */
-static struct lock *threads_remaining_lock;
-static struct lock *ropes_left_lock;
+struct lock *threads_remaining_lock;
+struct lock *ropes_left_lock;
 
 /*
  * Describe your design and any invariants or locking protocols
@@ -67,9 +67,10 @@ static struct lock *ropes_left_lock;
  *   - In order to cut the rope, thread must acquire the specific lock for this rope, change its status, and release the lock.
  *   - In order to access the rope via the stake or change stake's rope, thread must acquire the lock for the stake than the lock for its 
  *   respective rope, do its operations and release both locks.
+ *   - When acquiring two stakes must make sure to acquire the stake with lowest index first.
  *
  * `dandelion` will print its starting statement and get inside a loop. In each loop iteration, it will randomly get its next_hook and 
- *  the rope attached to the hook, than it will check the status of the rope. If not severed, it acquire the rope's lock, otherwise it restart the
+ *  the rope attached to the hook, then it will check the status of the rope. If not severed, it acquire the rope's lock, otherwise it restart the
  *  loop. When the rope's lock is acquired, it checks if other thread severed the rope when it was trying to acquire the lock. If the rope is severed
  *  it release the rope's lock, and restart the while loop. Otherwise it sets the rope status to severed, print its severed statement, reduce 
  *  `ropes_left` by one, making sure to acquire and release the variable's lock, release the rope's lock and thread_yeld(). It will only exit 
@@ -81,11 +82,12 @@ static struct lock *ropes_left_lock;
  *   the rope's lock or when the first check on rope status fail.
 
  *  `flowerkill` will print its starting statement and get inside a loop. In each loop iteration, it will randomly select two stake, make sure they are
- *  different and lock them in order according to their index(to avoid deadlocks), then it will lock the rope attached to the stakes. It will check if any of the ropes are
- *  severed, if they are it will release all the locks and restart the loop. If neither ropes are severed, it switches the ropes attached to each stake, 
- *  print both switch states, release all 4 locks it is current holding and thread_yield.  The thread will loop until it achieve its exiting condition of 
- *  having 1 or less ropes_left. This thread can leave when 1 rope is left since at that point it will not have enough ropes and stakes to do the switch. 
- *  Before exiting, it acquires `threads_remaining` lock, do its done print, reduce `threads_remaining by one, release `threads_remaining` lock and exit.
+ *  different and lock them in increasing order based on their index(to avoid deadlocks), then it will lock the ropes attached to the stakes. It will 
+ *  check if any of the ropes are severed. Ff they are severed, it will release all the locks and restart the loop. If neither ropes are severed, it switches 
+ *  the ropes attached to each stake, print both switch states, release all 4 locks it is current holding and thread_yield.  
+ *  The thread will loop until it achieve its exiting condition of having 1 or less ropes_left. This thread can leave when 1 rope is left since at that 
+ *  point it will not have enough ropes and stakes to do the switch. Before exiting, it acquires `threads_remaining` lock, do its done print, reduce 
+ *  `threads_remaining by one, release `threads_remaining` lock and exit.
  * 
  */
 
