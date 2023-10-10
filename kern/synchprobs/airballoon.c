@@ -9,7 +9,7 @@
 
 #define N_LORD_FLOWERKILLER 8
 #define NROPES 16	
-#define NTHREADS N_LORD_FLOWERKILLER + 3 //Includes Dandelion, Marigold, FlowerKiller and Ballon. Main thread not included.
+#define NTHREADS N_LORD_FLOWERKILLER + 4 
 static volatile int ropes_left = NROPES;
 static volatile int threads_remaining = NTHREADS; 
 
@@ -48,14 +48,14 @@ static struct lock *ropes_left_lock;
  *
  * We have two global variables `ropes_left` and `thread_remaining` to keep track of this informations and one lock for each
  * variable so they can be safely and correctly modified by the different threads. `ropes_left` starts as the number of ropes we have 
- * in the problem and `thread_remaining` will be the number of threads the main thread(airballon) will fork, including Dandalion, 
+ * in the problem and `thread_remaining` will be the airballoon and the number of threads the main  will fork, including Dandalion, 
  * Marigold, FlowerKiller and Ballon.
  *
  * `airballon` thread will first initialize the locks for our global variables, alloc the space for our structs array, and fill the
  * array with NROPES elements each and all the variables of each element. At the start, structs, ropes and stakes will have a 
  * 1:1:1 relation regarding its index, therefore hook and stake at index N of their respective array will be connected to rope at index
  * N of the ropes array. After forking all the other threads `airballon` thread will thread_yeald until it achieve its exit condition of
- * having threads_remaing equal to zero, then it will clean up the memory, print its done statement and exit.
+ * having threads_remaing equal to 1, then it will clean up the memory, print its done statement and exit.
  *
  * `ballon` thread will just thread_yeald until it achieves its exit condition of ropes_left being 0, meaning that all ropes were cut and  
  * Dandelion is free. Before exiting, it print the free statement, acquires `threads_remaining` lock, do its done print, reduce 
@@ -80,14 +80,12 @@ static struct lock *ropes_left_lock;
  *   stake's lock(So flowekiller can't modify the rope attached to the stake), and remember to release the stake's lock right after releasing
  *   the rope's lock or when the first check on rope status fail.
 
- *  `flowerkill` will print its starting statement and get inside a loop. In each loop iteration, it will randomly select its first stake and
- *  lock it, than it will lock the rope attached to first stake,  it will randomly select the second stake and check if stakes are different and rope
- *  1 is not severed. If not successfull, it releases all the previously acquired locks and restart the loop, otherwise it acquire the rope 
- *  attached to the second stake and check if it is severed, if severed it has to release all the locks acquired and restart the loop. If succesfull,
- *  it switches the ropes attached to each stake, print both switch states, release all 4 locks it is current holding and thread_yield. 
- *  The thread will loop until it achieve its exiting condition of having 1 or less ropes_left. This thread can leave when 1 rope is left since at 
- *  that point it will not have enough ropes and stakes to do the switch. Before exiting, it acquires `threads_remaining` lock, do its done print,
- *	reduce `threads_remaining by one, release `threads_remaining` lock and exit.
+ *  `flowerkill` will print its starting statement and get inside a loop. In each loop iteration, it will randomly select two stake, make sure they are
+ *  different and lock them in order according to their index(to avoid deadlocks), then it will lock the rope attached to the stakes. It will check if any of the ropes are
+ *  severed, if they are it will release all the locks and restart the loop. If neither ropes are severed, it switches the ropes attached to each stake, 
+ *  print both switch states, release all 4 locks it is current holding and thread_yield.  The thread will loop until it achieve its exiting condition of 
+ *  having 1 or less ropes_left. This thread can leave when 1 rope is left since at that point it will not have enough ropes and stakes to do the switch. 
+ *  Before exiting, it acquires `threads_remaining` lock, do its done print, reduce `threads_remaining by one, release `threads_remaining` lock and exit.
  * 
  */
 
@@ -195,30 +193,27 @@ flowerkiller(void *p, unsigned long arg)
 
 	while(ropes_left > 1){
 		int stake_1 = random() % NROPES;
-	
-		lock_acquire(stakes[stake_1].stake_lock);
-
-		int rope_1 = stakes[stake_1].stake_rope;
-
-		lock_acquire(ropes[rope_1].rope_lock);
-
 		int stake_2 = random() % NROPES;
-		
-		//Check rope 1 is not severed and that stakes are not the same
-		if(ropes[rope_1].is_severed == true || stake_2 == stake_1){
-			//Release all prevously acquired locks, restart the loop
-			lock_release(ropes[rope_1].rope_lock);
-			lock_release(stakes[stake_1].stake_lock);		
-			continue;
+		while(stake_1 == stake_2){
+			stake_2 = random() % NROPES;
 		}
 
-		lock_acquire(stakes[stake_2].stake_lock);
+		//Make sure to lock stakes on increasing order
+		if(stake_1 < stake_2){
+			lock_acquire(stakes[stake_1].stake_lock);
+			lock_acquire(stakes[stake_2].stake_lock);
+		}else{
+			lock_acquire(stakes[stake_2].stake_lock);
+			lock_acquire(stakes[stake_1].stake_lock);
+		}
+
+		int rope_1 = stakes[stake_1].stake_rope;
 		int rope_2 = stakes[stake_2].stake_rope;
 
+		lock_acquire(ropes[rope_1].rope_lock);
 		lock_acquire(ropes[rope_2].rope_lock);
-		//Check rope 2 is not severed
-		if(ropes[rope_2].is_severed == true){
-			//Release all prevously acquired locks, restart the loop
+
+		if(ropes[rope_1].is_severed == true || ropes[rope_2].is_severed == true){
 			lock_release(ropes[rope_1].rope_lock);
 			lock_release(stakes[stake_1].stake_lock);
 			lock_release(ropes[rope_2].rope_lock);
@@ -238,13 +233,10 @@ flowerkiller(void *p, unsigned long arg)
 
 		//Release all acquired locks
 		lock_release(ropes[rope_1].rope_lock);
-		lock_release(stakes[stake_1].stake_lock);
 		lock_release(ropes[rope_2].rope_lock);
+		lock_release(stakes[stake_1].stake_lock);
 		lock_release(stakes[stake_2].stake_lock);
-
 		thread_yield();
-
-		
 	}
 
 	lock_acquire(threads_remaining_lock);
@@ -326,9 +318,13 @@ airballoon(int nargs, char **args)
 		goto panic;
 	
 	//Thread yield until all other threads are done
-	while(threads_remaining > 0){
+	while(threads_remaining > 1){
 		thread_yield();
 	}
+
+	lock_acquire(threads_remaining_lock);
+	threads_remaining--;
+	lock_release(threads_remaining_lock);
 
 	//Set up global variables again, so airballon works if called again
 	ropes_left = NROPES;
