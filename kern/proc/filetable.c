@@ -89,11 +89,8 @@ ft_add_entry(struct filetable *filetable, struct ft_entry *ft_entry, int32_t *ne
     KASSERT(ft_entry != NULL);
     KASSERT(filetable != NULL);
 
-    lock_acquire(filetable->ft_lk);
-
     fd = ft_next_available_fd(filetable);
     if(fd < 0){
-        lock_release(filetable->ft_lk);
         return EMFILE;
     }
 
@@ -105,8 +102,6 @@ ft_add_entry(struct filetable *filetable, struct ft_entry *ft_entry, int32_t *ne
     ft_entry->fte_count++;
     lock_release(ft_entry->fte_lk);
     
-    lock_release(filetable->ft_lk);
-
     return 0;
 }
 
@@ -118,12 +113,9 @@ ft_remove_entry(struct filetable *filetable, int fd)
 
     KASSERT(filetable != NULL);
 
-    lock_acquire(filetable->ft_lk);
-
     result = ft_is_fd_valid(filetable, fd);
 
     if (result){
-        lock_release(filetable->ft_lk);
         return result;
     }   
 
@@ -138,8 +130,6 @@ ft_remove_entry(struct filetable *filetable, int fd)
     } else{
         fte_destroy(ft_entry);
     }
-
-    lock_release(filetable->ft_lk);
     return 0;
     
 }

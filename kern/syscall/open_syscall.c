@@ -45,7 +45,12 @@ sys_open(const char *filename, int flags, int32_t *retval1){
         return result;
     }
 
+    lock_acquire(filetable->ft_lk);
+
     result = ft_add_entry(ft, fte_create(file, flags), retval1);
+
+    lock_release(filetable->ft_lk);
+
     if(result){
         return result;
     }

@@ -18,7 +18,12 @@ sys_close(int fd){
     int result;
     struct filetable* filetable = curproc->p_filetable;
 
+    lock_acquire(filetable->ft_lk);
+
     result = ft_remove_entry(filetable, fd);
+
+    lock_release(filetable->ft_lk);
+
     if(result){
         return result;
     }
