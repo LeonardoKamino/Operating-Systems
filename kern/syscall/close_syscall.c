@@ -15,6 +15,13 @@
 
 int 
 sys_close(int fd){
-    (void) fd;
+    int result;
+    struct filetable* filetable = curproc->p_filetable;
+
+    result = ft_remove_entry(filetable, fd);
+    if(result){
+        return result;
+    }
+
     return 0;
 }
