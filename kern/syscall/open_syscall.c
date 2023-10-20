@@ -11,13 +11,45 @@
 #include <kern/errno.h>
 #include <copyinout.h>
 #include <kern/syscall.h>
+#include <kern/fcntl.h>
 
 
 int 
 sys_open(const char *filename, int flags, int32_t *retval1){
-    (void) filename;
-    (void) flags;
-    (void) retval1;
+    struct vnode* file;
+    struct filetable * ft = curproc->p_filetable;
+    char * filepath;        
+    size_t filepath_len;
+    int result;
+    
+
+    //EFAULT filename was an invalid pointer
+    if (filename == NULL){
+        return EFAULT;
+    }
+
+    filepath = kmalloc(sizeof(filename));
+    if(filepath == NULL){
+        return ENOMEM;
+    }
+
+    result = copyinstr((const_userptr_t) filename, filepath, strlen(filename) + 1, &filepath_len);
+    if(result){
+        kfree(filepath);
+        return result;
+    }
+
+    result = vfs_open(filepath, flags, 0, &file);
+    kfree(filepath);
+    if(result){
+        return result;
+    }
+
+    result = ft_add_entry(ft, fte_create(file, flags), retval1);
+    if(result){
+        return result;
+    }
+
     
     return 0;
 }

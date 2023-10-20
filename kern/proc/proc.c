@@ -74,7 +74,7 @@ proc_create(const char *name)
 		return NULL;
 	}
 
-	proc->p_filetable = ft_create("Process Filetable");
+	proc->p_filetable = ft_create(proc->p_name);
 	if(proc->p_filetable == NULL){
 		kfree(proc);
 		kfree(proc->p_name);

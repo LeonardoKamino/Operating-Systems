@@ -10,8 +10,7 @@
 #include <copyinout.h>
 #include <filetable.h>
 #include <synch.h>
-#include <unistd.h>
-#include <fcntl.h>
+#include <kern/fcntl.h>
 
 
 struct filetable *
@@ -47,7 +46,7 @@ ft_stdio_init(struct filetable *ft){
     
     int result;
 
-    char * con = "con:";
+    const char * con = "con:";
 
      /**
      * Initialize stdio files. The first three file descriptors
@@ -84,27 +83,44 @@ ft_stdio_init(struct filetable *ft){
 }
 
 int
-ft_add_entry(struct filetable *filetable, struct ft_entry *ft_entry)
+ft_add_entry(struct filetable *filetable, struct ft_entry *ft_entry, int32_t *nextfd)
 {
+    int fd;
     KASSERT(ft_entry != NULL);
     KASSERT(filetable != NULL);
 
     lock_acquire(filetable->ft_lk);
 
-    int fd = ft_next_available_fd(filetable);
+    fd = ft_next_available_fd(filetable);
     if(fd < 0){
-        return -1;
+        return EMFILE;
     }
 
+    *nextfd = fd;
+
     filetable->ft_entries[fd] = ft_entry;
+
+    lock_acquire(ft_entry->fte_lk);
+    ft_entry->fte_count++;
+    lock_release(ft_entry->fte_lk);
     
     lock_release(filetable->ft_lk);
 
     return 0;
 }
 
+int
+ft_remove_entry(struct filetable *filetable, int fd)
+{
+    (void) filetable;
+    (void) fd;
+    return 0;
+    
+}
+
 int 
-ft_next_available_fd(struct filetable *filetable){
+ft_next_available_fd(struct filetable *filetable)
+{
     KASSERT(filetable != NULL);
     
     for(int i = 0; i < OPEN_MAX; i++){
@@ -154,14 +170,13 @@ fte_create(struct vnode *fte_file, int fte_flags)
     return ft_entry;
 }
 
-
 void 
 fte_destroy(struct ft_entry *ft_entry)
 {
     KASSERT(ft_entry != NULL);
-    
-    lock_destroy(ft_entry->fte_lk);
+
     vfs_close(ft_entry->fte_file);
+    lock_destroy(ft_entry->fte_lk);
     kfree(ft_entry);
 }
 
