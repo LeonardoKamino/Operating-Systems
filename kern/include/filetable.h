@@ -28,6 +28,7 @@ void ft_destroy(struct filetable *filetable);
 struct filetable *ft_add_file(struct vnode *fte_file);
 int ft_add_entry(struct filetable *filetable, struct ft_entry * ft_entry, int32_t *nextfd);
 int ft_remove_entry(struct filetable *filetable, int fd);
+int ft_is_fd_valid(struct filetable *filetable, int fd);
 int ft_next_available_fd(struct filetable *filetable);
 int ft_stdio_init(struct filetable *ft);
 

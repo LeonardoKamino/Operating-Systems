@@ -93,6 +93,7 @@ ft_add_entry(struct filetable *filetable, struct ft_entry *ft_entry, int32_t *ne
 
     fd = ft_next_available_fd(filetable);
     if(fd < 0){
+        lock_release(filetable->ft_lk);
         return EMFILE;
     }
 
@@ -112,11 +113,52 @@ ft_add_entry(struct filetable *filetable, struct ft_entry *ft_entry, int32_t *ne
 int
 ft_remove_entry(struct filetable *filetable, int fd)
 {
-    (void) filetable;
-    (void) fd;
+    int result;
+    struct ft_entry * ft_entry;
+
+    KASSERT(filetable != NULL);
+
+    lock_acquire(filetable->ft_lk);
+
+    result = ft_is_fd_valid(filetable, fd);
+
+    if (result){
+        lock_release(filetable->ft_lk);
+        return result;
+    }   
+
+    ft_entry = filetable->ft_entries[fd];
+    filetable->ft_entries[fd] = NULL;
+
+    lock_acquire(ft_entry->fte_lk);
+
+    ft_entry->fte_count--;
+    if(ft_entry->fte_count > 0) {
+        lock_release(ft_entry->fte_lk);
+    } else{
+        fte_destroy(ft_entry);
+    }
+
+    lock_release(filetable->ft_lk);
     return 0;
     
 }
+
+/*
+* Must hold the filetable lock before calling this function
+*/
+int
+ft_is_fd_valid(struct filetable *filetable, int fd){
+    if(fd < 0 || fd > OPEN_MAX || filetable->ft_entries[fd] == NULL){
+        return EBADF;
+    }
+
+    return 0;
+}
+
+/*
+* Must hold the filetable lock before calling this function
+*/
 
 int 
 ft_next_available_fd(struct filetable *filetable)
@@ -170,12 +212,17 @@ fte_create(struct vnode *fte_file, int fte_flags)
     return ft_entry;
 }
 
+
+/*
+* Must hold the filetable entry lock before calling it
+*/
 void 
 fte_destroy(struct ft_entry *ft_entry)
 {
     KASSERT(ft_entry != NULL);
 
     vfs_close(ft_entry->fte_file);
+    lock_release(ft_entry->fte_lk);
     lock_destroy(ft_entry->fte_lk);
     kfree(ft_entry);
 }
