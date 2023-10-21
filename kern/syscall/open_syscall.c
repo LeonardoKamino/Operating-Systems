@@ -28,12 +28,12 @@ sys_open(const char *filename, int flags, int32_t *retval1){
         return EFAULT;
     }
 
-    filepath = kmalloc(sizeof(filename));
+    filepath = kmalloc(NAME_MAX);
     if(filepath == NULL){
         return ENOMEM;
     }
 
-    result = copyinstr((const_userptr_t) filename, filepath, strlen(filename) + 1, &filepath_len);
+    result = copyinstr((const_userptr_t) filename, filepath, NAME_MAX, &filepath_len);
     if(result){
         kfree(filepath);
         return result;

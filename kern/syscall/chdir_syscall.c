@@ -11,10 +11,37 @@
 #include <kern/errno.h>
 #include <copyinout.h>
 #include <kern/syscall.h>
+#include <limits.h>
 
 
 int 
 sys_chdir(const char *pathname){
-    (void) pathname;
+    char *newpath;
+    size_t newpath_len;
+
+    int result;
+
+    if(pathname == NULL){
+        return EFAULT;
+    }
+
+    newpath = kmalloc(PATH_MAX);
+    if(newpath == NULL){
+        return ENOMEM;
+    }
+  
+    result = copyinstr((const_userptr_t) pathname, newpath, PATH_MAX, &newpath_len);
+    if(result){
+        kfree(newpath);
+        return result;
+    }
+
+    result = vfs_chdir(newpath);
+    kfree(newpath);
+
+    if(result){
+        return result;
+    }
+
     return 0;
 }

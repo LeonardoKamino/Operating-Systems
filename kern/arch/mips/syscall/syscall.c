@@ -35,6 +35,7 @@
 #include <thread.h>
 #include <current.h>
 #include <syscall.h>
+#include <copyinout.h>
 
 
 /*
@@ -82,6 +83,8 @@ syscall(struct trapframe *tf)
 	int32_t retval1;
 	int32_t retval2;
 	int err;
+	off_t pos;
+	int whence;
 
 	KASSERT(curthread != NULL);
 	KASSERT(curthread->t_curspl == 0);
@@ -120,8 +123,16 @@ syscall(struct trapframe *tf)
 	    case SYS_write:
 			err = sys_write(tf->tf_a0, (void *)tf->tf_a1, tf->tf_a2, &retval1);
 			break;
-		case SYS_lseek:
-			err = sys_lseek(tf->tf_a0, tf->tf_a1, tf->tf_a2, &retval1, &retval2);
+		case SYS_lseek: 
+			err = copyin((userptr_t) tf->tf_sp + 16, &whence, sizeof(int));
+			if(err){
+				break;
+			}
+			pos = tf->tf_a2;
+			pos = pos << 32;
+			pos = pos | tf->tf_a3;
+
+			err = sys_lseek(tf->tf_a0, pos, whence, &retval1, &retval2);
 			break;
 		case SYS_dup2:
 			err = sys_dup2(tf->tf_a0, tf->tf_a1, &retval1);

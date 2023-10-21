@@ -20,21 +20,19 @@ sys_dup2(int oldfd, int newfd, int32_t *retval1)
     struct ft_entry *ft_entry;
     int result;
 
+    *retval1 = -1;
+
     lock_acquire(filetable->ft_lk);
     
     result = ft_is_fd_valid(filetable, oldfd, true);
     if(result){
-        *retval1 = -1;
-        lock_release(filetable->ft_lk);
-        return result;
+        goto error_release_1;
     }
 
     //Check if newfd value is within valid range
     result = ft_is_fd_valid(filetable, newfd, false);
     if(result){
-        *retval1 = -1;
-        lock_release(filetable->ft_lk);
-        return result;
+        goto error_release_1;
     }
 
     //Check if fds are pointing to same ft_entry
@@ -51,9 +49,7 @@ sys_dup2(int oldfd, int newfd, int32_t *retval1)
     if(!result){
         result = ft_remove_entry(filetable, newfd);
         if(result) {
-            *retval1 = -1;
-            lock_release(filetable->ft_lk);
-            return result;
+            goto error_release_1;
         }
     }
 
@@ -69,4 +65,9 @@ sys_dup2(int oldfd, int newfd, int32_t *retval1)
     lock_release(filetable->ft_lk);
 
     return 0;
+
+error_release_1:
+    lock_release(filetable->ft_lk);
+    return result;
+
 }

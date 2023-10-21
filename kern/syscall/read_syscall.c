@@ -19,14 +19,16 @@ int
 sys_read(int fd, void *buf, size_t buflen, int32_t *retval1){
 
     struct filetable *filetable = curproc->p_filetable;
-    struct ft_entry * ft_entry = filetable->ft_entries[fd];
+    struct ft_entry * ft_entry;
 
+    void * kbuf;
     struct iovec iov;
     struct uio u;
     int result;
 
+    *retval1 = -1;
+
     if(buf == NULL || buflen <= 0){
-        *retval1 = -1;
         return EFAULT;
     }
 
@@ -34,36 +36,35 @@ sys_read(int fd, void *buf, size_t buflen, int32_t *retval1){
 
     result = ft_is_fd_valid(filetable, fd, true);
     if(result){
-        *retval1 = -1;
-        lock_release(filetable->ft_lk);
-        return result;
+        goto error_release_1;
     }
+
+    ft_entry = filetable->ft_entries[fd];
 
     lock_acquire(ft_entry->fte_lk);
 
-    if(ft_entry->fte_flags == O_WRONLY){
-        *retval1 = -1;
-        lock_release(ft_entry->fte_lk);
-        lock_release(filetable->ft_lk);
-        return EBADF;
+    if(ft_entry->fte_flags & O_WRONLY){
+        result = EBADF;
+        goto error_release_2;
     }
 
-    iov.iov_kbase = (userptr_t) buf;
-	iov.iov_len = buflen;
-	u.uio_iov = &iov;
-	u.uio_iovcnt = 1;
-	u.uio_offset = ft_entry->fte_offset;
-	u.uio_resid = buflen;
-	u.uio_segflg = UIO_USERSPACE;
-	u.uio_rw = ft_entry->fte_flags;
-	u.uio_space = curproc->p_addrspace;
+    kbuf = kmalloc(buflen);
+    if(kbuf == NULL){
+        result = ENOMEM;
+        goto error_release_2;
+    }
+
+    uio_kinit(&iov, &u, kbuf, buflen, ft_entry->fte_offset, UIO_READ);
 
     result = VOP_READ(ft_entry->fte_file, &u);
     if(result){
-        *retval1 = -1;
-        lock_release(ft_entry->fte_lk);
-        lock_release(filetable->ft_lk);
-        return result;
+        goto error_release_2;
+    }
+
+    result = copyout(kbuf, buf, buflen);
+    kfree(kbuf);
+    if(result){
+        goto error_release_2;
     }
 
     ft_entry->fte_offset = u.uio_offset;
@@ -73,4 +74,10 @@ sys_read(int fd, void *buf, size_t buflen, int32_t *retval1){
     lock_release(filetable->ft_lk);
 
     return 0;
+
+error_release_2:
+    lock_release(ft_entry->fte_lk);
+error_release_1:
+    lock_release(filetable->ft_lk);
+    return result;
 }
