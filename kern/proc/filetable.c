@@ -113,8 +113,7 @@ ft_remove_entry(struct filetable *filetable, int fd)
 
     KASSERT(filetable != NULL);
 
-    result = ft_is_fd_valid(filetable, fd);
-
+    result = ft_is_fd_valid(filetable, fd, true);
     if (result){
         return result;
     }   
@@ -138,8 +137,12 @@ ft_remove_entry(struct filetable *filetable, int fd)
 * Must hold the filetable lock before calling this function
 */
 int
-ft_is_fd_valid(struct filetable *filetable, int fd){
-    if(fd < 0 || fd > OPEN_MAX || filetable->ft_entries[fd] == NULL){
+ft_is_fd_valid(struct filetable *filetable, int fd, bool check_presence){
+    if(fd < 0 || fd > OPEN_MAX ){
+        return EBADF;
+    }
+
+    if(check_presence && filetable->ft_entries[fd] == NULL){
         return EBADF;
     }
 

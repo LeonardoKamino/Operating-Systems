@@ -17,7 +17,7 @@
 int 
 sys_open(const char *filename, int flags, int32_t *retval1){
     struct vnode* file;
-    struct filetable * ft = curproc->p_filetable;
+    struct filetable * filetable = curproc->p_filetable;
     char * filepath;        
     size_t filepath_len;
     int result;
@@ -47,7 +47,7 @@ sys_open(const char *filename, int flags, int32_t *retval1){
 
     lock_acquire(filetable->ft_lk);
 
-    result = ft_add_entry(ft, fte_create(file, flags), retval1);
+    result = ft_add_entry(filetable, fte_create(file, flags), retval1);
 
     lock_release(filetable->ft_lk);
 
@@ -55,6 +55,5 @@ sys_open(const char *filename, int flags, int32_t *retval1){
         return result;
     }
 
-    
     return 0;
 }
