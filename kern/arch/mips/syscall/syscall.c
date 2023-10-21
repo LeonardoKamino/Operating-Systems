@@ -124,7 +124,7 @@ syscall(struct trapframe *tf)
 			err = sys_write(tf->tf_a0, (void *)tf->tf_a1, tf->tf_a2, &retval1);
 			break;
 		case SYS_lseek: 
-			err = copyin((userptr_t) tf->tf_sp + 16, &whence, sizeof(int));
+			err = copyin((userptr_t) tf->tf_sp + 16, &whence, sizeof(int)); /* Get argument from stack */
 			if(err){
 				break;
 			}

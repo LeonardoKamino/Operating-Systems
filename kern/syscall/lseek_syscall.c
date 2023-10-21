@@ -14,7 +14,10 @@
 #include <kern/seek.h>
 #include <stat.h>
 
-
+/**
+ * Alters the current seek position of the file handle, 
+ * seeking a new position based on pos and whence
+ */
 int 
 sys_lseek(int fd, off_t pos, int whence, int32_t *retval1, int32_t *retval2){
     struct filetable *filetable = curproc->p_filetable;
@@ -25,12 +28,19 @@ sys_lseek(int fd, off_t pos, int whence, int32_t *retval1, int32_t *retval2){
 
     *retval1 = -1;
 
+    /** 
+     * Checks to make sure that whence is equal to one of:
+     *      SEEK_SET - 0
+     *      SEEK_CUR - 1
+     *      SEEK_END - 2
+     */
     if(whence > SEEK_END || whence < SEEK_SET){
         return EINVAL;
     }
     
     lock_acquire(filetable->ft_lk);
 
+    /* Checks to make sure the file descriptor is valid */
     result = ft_is_fd_valid(filetable, fd, true);
     if(result){
         goto error_release_1;
@@ -38,17 +48,20 @@ sys_lseek(int fd, off_t pos, int whence, int32_t *retval1, int32_t *retval2){
 
     ft_entry = filetable->ft_entries[fd];
 
-    //check fd does not support seeking
     lock_acquire(ft_entry->fte_lk);
     
+    /** 
+     * Check if this file is seekable. All regular files
+     * and directories are seekable, but some devices are
+     * not.
+     */
     result = VOP_ISSEEKABLE(ft_entry->fte_file);
     if(!result){
         result = ESPIPE;
         goto error_release_2;
     }
-        
-    //add pos to offset based on whence
-
+    
+    /* Creates a new offset value depending on whence */
     switch (whence){
         case SEEK_SET:
             new_offset = pos;
@@ -58,7 +71,8 @@ sys_lseek(int fd, off_t pos, int whence, int32_t *retval1, int32_t *retval2){
             new_offset = ft_entry->fte_offset + pos;
             break;
             
-        case SEEK_END:
+        case SEEK_END: 
+            /* Get file stats to know EOF */
             file_stats = kmalloc(sizeof(struct stat));
             if(file_stats == NULL){
                 result = ENOMEM;
@@ -70,11 +84,17 @@ sys_lseek(int fd, off_t pos, int whence, int32_t *retval1, int32_t *retval2){
             break;
     }
 
+    /*Ensures that the new offset is not less than 0 */
     if(new_offset < 0) {
         result = EINVAL;
         goto error_release_2;
     }
 
+    /**
+     * Sets the files offset to the new offset and splits the 
+     * 64 bit result into two 32 bit return values to be used 
+     * in the v0 and v1 registers
+     */
     ft_entry->fte_offset = new_offset;
 
     *retval1 = new_offset >> 32;

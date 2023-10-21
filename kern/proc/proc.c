@@ -74,6 +74,9 @@ proc_create(const char *name)
 		return NULL;
 	}
 
+	/**
+	 * Creates a fieltable for the newly created process 
+	 */
 	proc->p_filetable = ft_create(proc->p_name);
 	if(proc->p_filetable == NULL){
 		kfree(proc);
@@ -210,6 +213,7 @@ proc_create_runprogram(const char *name)
 		return NULL;
 	}
 
+	/* Initailize filetable with stdin, stdout and stderr */
 	ft_stdio_init(newproc->p_filetable);
 
 	/* VM fields */

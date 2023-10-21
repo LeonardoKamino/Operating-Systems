@@ -14,6 +14,9 @@
 #include <kern/fcntl.h>
 
 
+/**
+ * Syscall to open a specified file with the given flags
+ */
 int 
 sys_open(const char *filename, int flags, int32_t *retval1){
     struct vnode* file;
@@ -23,7 +26,7 @@ sys_open(const char *filename, int flags, int32_t *retval1){
     int result;
     
 
-    //EFAULT filename was an invalid pointer
+    /* Ensures that the provided file name is valid */
     if (filename == NULL){
         return EFAULT;
     }
@@ -33,18 +36,24 @@ sys_open(const char *filename, int flags, int32_t *retval1){
         return ENOMEM;
     }
 
+    /**
+     * Copies the argument in user space, filename, to the 
+     * pointer in kernel space, filepath
+     */
     result = copyinstr((const_userptr_t) filename, filepath, NAME_MAX, &filepath_len);
     if(result){
         kfree(filepath);
         return result;
     }
 
+    /* Opens the file in kernel space */
     result = vfs_open(filepath, flags, 0, &file);
     kfree(filepath);
     if(result){
         return result;
     }
 
+    /* Adds the opened entry to the current process filetable */
     lock_acquire(filetable->ft_lk);
 
     result = ft_add_entry(filetable, fte_create(file, flags), retval1);

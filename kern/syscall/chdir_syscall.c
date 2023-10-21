@@ -13,31 +13,42 @@
 #include <kern/syscall.h>
 #include <limits.h>
 
-
+/**
+ * Sets the current directory of the current process 
+ * to the directory specifiedi in pathname
+ */
 int 
 sys_chdir(const char *pathname){
-    char *newpath;
-    size_t newpath_len;
+    char *kpathname;
+    size_t kpath_len;
 
     int result;
 
+    /**
+     * Checks that pathname is a valid address
+     */
     if(pathname == NULL){
         return EFAULT;
     }
 
-    newpath = kmalloc(PATH_MAX);
-    if(newpath == NULL){
+    kpathname = kmalloc(PATH_MAX);
+    if(kpathname == NULL){
         return ENOMEM;
     }
-  
-    result = copyinstr((const_userptr_t) pathname, newpath, PATH_MAX, &newpath_len);
+    
+    /**
+     * Copies the argument in user space, pathname, to the 
+     * pointer in kernel space, kpathname.
+     */
+    result = copyinstr((const_userptr_t) pathname, kpathname, PATH_MAX, &kpath_len);
     if(result){
-        kfree(newpath);
+        kfree(kpathname);
         return result;
     }
 
-    result = vfs_chdir(newpath);
-    kfree(newpath);
+    /* Changes the current working directory to the specified path */
+    result = vfs_chdir(kpathname);
+    kfree(kpathname);
 
     if(result){
         return result;
