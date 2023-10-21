@@ -138,7 +138,7 @@ ft_remove_entry(struct filetable *filetable, int fd)
 */
 int
 ft_is_fd_valid(struct filetable *filetable, int fd, bool check_presence){
-    if(fd < 0 || fd > OPEN_MAX ){
+    if(fd < 0 || fd > OPEN_MAX - 1 ){
         return EBADF;
     }
 
