@@ -97,18 +97,21 @@ ft_stdio_init(struct filetable *ft){
         return result;
     }
     ft->ft_entries[STDIN_FILENO] = fte_create(stdin_file, O_RDONLY);
+    ft->ft_entries[STDIN_FILENO]->fte_count += 1;
 
     result = vfs_open(kstrdup(con), O_WRONLY, 0, &stdout_file);
     if(result){
         return result;
     }
     ft->ft_entries[STDOUT_FILENO] = fte_create(stdout_file, O_WRONLY);
+    ft->ft_entries[STDOUT_FILENO]->fte_count += 1;
 
     result = vfs_open(kstrdup(con), O_WRONLY, 0, &stderr_file);
     if(result){
         return result;
     }
     ft->ft_entries[STDERR_FILENO] = fte_create(stderr_file, O_WRONLY);
+    ft->ft_entries[STDERR_FILENO]->fte_count += 1;
 
     return 0;
 }
