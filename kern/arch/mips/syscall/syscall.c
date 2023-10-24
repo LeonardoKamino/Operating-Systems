@@ -123,11 +123,18 @@ syscall(struct trapframe *tf)
 	    case SYS_write:
 			err = sys_write(tf->tf_a0, (void *)tf->tf_a1, tf->tf_a2, &retval1);
 			break;
-		case SYS_lseek: 
-			err = copyin((userptr_t) tf->tf_sp + 16, &whence, sizeof(int)); /* Get argument from stack */
+		case SYS_lseek:
+		 
+			/* Gets argument from stack */
+			err = copyin((userptr_t) tf->tf_sp + 16, &whence, sizeof(int)); 
 			if(err){
 				break;
 			}
+
+			/** 
+			 * Assigns the value from a2 and a3 (two 32 bit registers) 
+			 * to a 64 bit variable "pos" which is passed to lseek
+			 */
 			pos = tf->tf_a2;
 			pos = pos << 32;
 			pos = pos | tf->tf_a3;

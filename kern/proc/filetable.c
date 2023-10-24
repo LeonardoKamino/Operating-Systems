@@ -48,7 +48,8 @@ ft_create(char *name)
  * filetable
  */
 void
-ft_destroy(struct filetable *ft){
+ft_destroy(struct filetable *ft)
+{
     (void)ft;
     for(int i = 0; i < OPEN_MAX; i++){
         fte_destroy(ft->ft_entries[i]);
@@ -60,16 +61,17 @@ ft_destroy(struct filetable *ft){
 }
 
 /**
- * Initializes the filetable's first three entries of 
- * the filetable.The first three file descriptors 
- * (0, 1 and 2) are considered as standard input, 
- * standard output and standard error respectively.
+ * Initializes the filetable's first three entries. 
+ * The first three file descriptors (0, 1 and 2)
+ * are considered as standard input, standard
+ * output and standard error respectively.
  */
 int
-ft_stdio_init(struct filetable *ft){
-    struct vnode * stdin_file;
-    struct vnode * stdout_file;
-    struct vnode * stderr_file;
+ft_stdio_init(struct filetable *ft)
+{
+    struct vnode *stdin_file;
+    struct vnode *stdout_file;
+    struct vnode *stderr_file;
     
     int result;
 
@@ -78,7 +80,7 @@ ft_stdio_init(struct filetable *ft){
      * These file descriptors start out attached to the 
      * console device "con:"
      */
-    const char * con = "con:";
+    const char *con = "con:";
 
      /**
      * Initialize stdio files. The first three file descriptors
@@ -150,7 +152,7 @@ int
 ft_remove_entry(struct filetable *filetable, int fd)
 {
     int result;
-    struct ft_entry * ft_entry;
+    struct ft_entry *ft_entry;
 
     KASSERT(filetable != NULL);
 
@@ -168,7 +170,8 @@ ft_remove_entry(struct filetable *filetable, int fd)
     if(ft_entry->fte_count > 0) {
         lock_release(ft_entry->fte_lk);
     } else{
-        fte_destroy(ft_entry); //Destroy entry if no fd references it
+        /* Destroy entry if no fd references it */
+        fte_destroy(ft_entry); 
     }
     return 0;
     
@@ -176,7 +179,8 @@ ft_remove_entry(struct filetable *filetable, int fd)
 
 /**
  * Check if fd is within valid range [0, OPENMAX]
- * If check_presence make sure the fd has an entry referenced by it
+ * the check_presence if statement makes sure the fd has an 
+ * entry referenced by it
  * 
  * Must hold the filetable lock before calling this function
  */

@@ -16,7 +16,8 @@
  * Gets the name of the current working directory
  */
 int 
-sys___getcwd(char *buf, size_t buflen, int32_t *retval1){
+sys___getcwd(char *buf, size_t buflen, int32_t *retval1)
+{
     struct iovec iov;
     struct uio u;
     int result;

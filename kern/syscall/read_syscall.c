@@ -19,12 +19,12 @@
  * file descriptor
  */
 int 
-sys_read(int fd, void *buf, size_t buflen, int32_t *retval1){
-
+sys_read(int fd, void *buf, size_t buflen, int32_t *retval1)
+{
     struct filetable *filetable = curproc->p_filetable;
-    struct ft_entry * ft_entry;
+    struct ft_entry *ft_entry;
 
-    void * kbuf;
+    void *kbuf;
     struct iovec iov;
     struct uio u;
     int result;

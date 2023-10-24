@@ -19,7 +19,8 @@
  * seeking a new position based on pos and whence
  */
 int 
-sys_lseek(int fd, off_t pos, int whence, int32_t *retval1, int32_t *retval2){
+sys_lseek(int fd, off_t pos, int whence, int32_t *retval1, int32_t *retval2)
+{
     struct filetable *filetable = curproc->p_filetable;
     struct ft_entry *ft_entry;
     struct stat *file_stats;

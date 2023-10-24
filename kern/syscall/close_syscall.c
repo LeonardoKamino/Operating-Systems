@@ -16,7 +16,8 @@
  * Syscall to close a file with a specified file descriptor
  */
 int 
-sys_close(int fd){
+sys_close(int fd)
+{
     int result;
     struct filetable* filetable = curproc->p_filetable;
 

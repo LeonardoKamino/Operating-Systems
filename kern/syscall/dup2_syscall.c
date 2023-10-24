@@ -74,5 +74,4 @@ sys_dup2(int oldfd, int newfd, int32_t *retval1)
 error_release_1:
     lock_release(filetable->ft_lk);
     return result;
-
 }

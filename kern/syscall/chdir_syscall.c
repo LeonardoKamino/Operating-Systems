@@ -15,10 +15,11 @@
 
 /**
  * Sets the current directory of the current process 
- * to the directory specifiedi in pathname
+ * to the directory specified in pathname
  */
 int 
-sys_chdir(const char *pathname){
+sys_chdir(const char *pathname)
+{
     char *kpathname;
     size_t kpath_len;
 
@@ -37,8 +38,8 @@ sys_chdir(const char *pathname){
     }
     
     /**
-     * Copies the argument in user space, pathname, to the 
-     * pointer in kernel space, kpathname.
+     * Copies the argument in user space "pathname" to the 
+     * pointer in kernel space "kpathname".
      */
     result = copyinstr((const_userptr_t) pathname, kpathname, PATH_MAX, &kpath_len);
     if(result){

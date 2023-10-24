@@ -18,10 +18,11 @@
  * Syscall to open a specified file with the given flags
  */
 int 
-sys_open(const char *filename, int flags, int32_t *retval1){
-    struct vnode* file;
-    struct filetable * filetable = curproc->p_filetable;
-    char * filepath;        
+sys_open(const char *filename, int flags, int32_t *retval1)
+{
+    struct vnode *file;
+    struct filetable *filetable = curproc->p_filetable;
+    char *filepath;        
     size_t filepath_len;
     int result;
     
