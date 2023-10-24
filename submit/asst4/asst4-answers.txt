@@ -19,7 +19,7 @@ UIO_SYSSPACE should be used when the data transfer happens within the kernel spa
 
 //////// 3. Why can the struct uio that is used to read in a segment be allocated on the stack in load_segment() (i.e., where does the memory read actually go)?
 
-The struct uio just holds information about the data transfer including information about the filesize, offset etc. not the actual data itself. The memory read actually goes into a virtual address that the struct uio contains
+The struct uio just holds information about the data transfer including information about the filesize, offset etc. not the actual data itself. The memory read actually goes into the address that the struct uio contains
 
 
 //////// 4. In runprogram(), why is it important to call vfs_close() before going to usermode?
@@ -34,7 +34,7 @@ This function is `enter_new_process` defined in `kern/arch/mips/locore/trap.c`. 
 
 //////// 6. In what file are copyin and copyout defined? memmove? Why can't copyin and copyout be implemented as simply as memmove?
 
-copyin and copyout are defined in copyinout.c
+copyin and copyout are defined in `kern/vm/copyinout.c`
 memmove is defined in `common/libc/string/memmove.c`
 Copyin and copyout cannot be simply implemented as memmove even though all 3 are used for transfer data, since the prior functions need to assure the block of user memory provided (an address and a length) falls within the proper userspace region. 
 
