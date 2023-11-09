@@ -39,9 +39,19 @@
 #include <spinlock.h>
 #include <thread.h> /* required for struct threadarray */
 #include <filetable.h> /* required for struct filetable*/
+#include <proctable.h> /* required for struct proctable*/
 
 struct addrspace;
 struct vnode;
+
+struct proctable *proctable;
+
+enum procstate {
+	PROC_RUNNING,
+	PROC_READY,
+	PROC_WAITING,
+	PROC_ZOMBIE
+};
 
 /*
  * Process structure.
@@ -60,6 +70,10 @@ struct proc {
 	/* add more material here as needed */
 	struct filetable *p_filetable;
 
+	pid_t pid; /* process id */
+	pid_t parent_pid; /* parent process id */
+	int p_status; /* process status */
+	int exitcode; /* exit code */
 };
 
 /* This is the process structure for the kernel and for kernel-only threads. */
@@ -86,5 +100,7 @@ struct addrspace *proc_getas(void);
 /* Change the address space of the current process, and return the old one. */
 struct addrspace *proc_setas(struct addrspace *);
 
+/*  */
+int proc_fork(struct proc **child_proc);
 
 #endif /* _PROC_H_ */

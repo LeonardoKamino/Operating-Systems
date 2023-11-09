@@ -49,7 +49,8 @@
 #include <addrspace.h>
 #include <vnode.h>
 #include <filetable.h>
-
+#include <proctable.h>
+#include <kern/errno.h>
 /*
  * The process for the kernel; this holds all the kernel-only threads.
  */
@@ -92,6 +93,10 @@ proc_create(const char *name)
 
 	/* VFS fields */
 	proc->p_cwd = NULL;
+
+	proc->pid = 1;
+	proc->parent_pid = 0;
+
 
 	return proc;
 }
@@ -191,10 +196,16 @@ proc_destroy(struct proc *proc)
 void
 proc_bootstrap(void)
 {
+	proctable = pt_create();
 	kproc = proc_create("[kernel]");
 	if (kproc == NULL) {
 		panic("proc_create for kproc failed\n");
 	}
+
+	/**
+	 * Add kernel process to the proctable 
+	 */
+	pt_add_entry_pid(proctable, kproc, kproc->pid);
 }
 
 /*
@@ -344,4 +355,51 @@ proc_setas(struct addrspace *newas)
 	proc->p_addrspace = newas;
 	spinlock_release(&proc->p_lock);
 	return oldas;
+}
+
+int 
+proc_fork(struct proc **child_proc){
+	KASSERT(child_proc != NULL);
+	int result;
+	struct proc *new_proc;
+
+	/* Create a new process */
+	new_proc = proc_create("child");
+	if (new_proc == NULL) {
+		return ENOMEM;
+	}
+	
+	/* Copy the address space */
+	result = as_copy(curproc->p_addrspace, &new_proc->p_addrspace);
+	if(result){
+		proc_destroy(new_proc);
+		return result;
+	}
+
+	/* Copy the filetable */
+	lock_acquire(curproc->p_filetable->ft_lk);
+	ft_copy(curproc->p_filetable, new_proc->p_filetable);
+	lock_release(curproc->p_filetable->ft_lk);
+
+	/* Copy the parent pid */
+
+	new_proc->parent_pid = curproc->pid;
+
+	// Make sure they have the same current working directory
+	spinlock_acquire(&curproc->p_lock);
+	if (curproc->p_cwd != NULL){
+		VOP_INCREF(curproc->p_cwd);
+		new_proc->p_cwd = curproc->p_cwd;
+	};
+	spinlock_release(&curproc->p_lock);
+
+	/* Add the child process to the proctable */
+
+	lock_acquire(proctable->pt_lock);
+	pt_add_entry(proctable, new_proc);
+	lock_release(proctable->pt_lock);
+
+	*child_proc = new_proc;
+	return 0;
+	
 }

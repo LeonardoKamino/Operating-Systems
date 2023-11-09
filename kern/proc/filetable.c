@@ -263,3 +263,22 @@ fte_destroy(struct ft_entry *ft_entry)
     kfree(ft_entry);
 }
 
+/**
+ * Copy pointers from source filetable to copy filetable
+ * 
+ * Must hold the filetable lock before calling this function
+ */
+void
+ft_copy(struct filetable *source, struct filetable *copy)
+{
+    for(int i = 0; i < OPEN_MAX; i++) {
+        if(source->ft_entries[i] != NULL) {
+            copy->ft_entries[i] = source->ft_entries[i];
+
+            lock_acquire(copy->ft_entries[i]->fte_lk);
+            copy->ft_entries[i]->fte_count++;
+            lock_release(copy->ft_entries[i]->fte_lk);
+        }
+    }
+}
+

@@ -332,6 +332,7 @@ file      thread/threadlist.c
 
 file      proc/proc.c
 file      proc/filetable.c
+file      proc/proctable.c
 
 #
 # Virtual memory system
@@ -385,7 +386,9 @@ file      syscall/lseek_syscall.c
 file      syscall/dup2_syscall.c
 file      syscall/chdir_syscall.c
 file      syscall/__getcwd_syscall.c
-
+file      syscall/fork_syscall.c
+file      syscall/getpid_syscall.c
+file      syscall/waitpid_syscall.c
 
 #
 # Startup and initialization

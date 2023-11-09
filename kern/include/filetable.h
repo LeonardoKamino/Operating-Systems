@@ -66,4 +66,7 @@ struct ft_entry *fte_create(struct vnode *fte_file, int fte_flags);
 /* Destroy filetable entry */
 void fte_destroy(struct ft_entry *ft_entry);
 
+/* Copy filetable */
+void ft_copy(struct filetable *source, struct filetable *copy);
+
 #endif //FILETABLE_H
