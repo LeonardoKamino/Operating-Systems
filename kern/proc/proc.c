@@ -362,6 +362,7 @@ proc_fork(struct proc **child_proc){
 	KASSERT(child_proc != NULL);
 	int result;
 	struct proc *new_proc;
+	struct proc *parent_proc = curproc;
 
 	/* Create a new process */
 	new_proc = proc_create("child");
@@ -370,28 +371,28 @@ proc_fork(struct proc **child_proc){
 	}
 	
 	/* Copy the address space */
-	result = as_copy(curproc->p_addrspace, &new_proc->p_addrspace);
+	result = as_copy(parent_proc->p_addrspace, &new_proc->p_addrspace);
 	if(result){
 		proc_destroy(new_proc);
 		return result;
 	}
 
 	/* Copy the filetable */
-	lock_acquire(curproc->p_filetable->ft_lk);
-	ft_copy(curproc->p_filetable, new_proc->p_filetable);
-	lock_release(curproc->p_filetable->ft_lk);
+	lock_acquire(parent_proc->p_filetable->ft_lk);
+	ft_copy(parent_proc->p_filetable, new_proc->p_filetable);
+	lock_release(parent_proc->p_filetable->ft_lk);
 
 	/* Copy the parent pid */
 
-	new_proc->parent_pid = curproc->pid;
+	new_proc->parent_pid = parent_proc->pid;
 
 	// Make sure they have the same current working directory
-	spinlock_acquire(&curproc->p_lock);
-	if (curproc->p_cwd != NULL){
-		VOP_INCREF(curproc->p_cwd);
-		new_proc->p_cwd = curproc->p_cwd;
+	spinlock_acquire(&parent_proc->p_lock);
+	if (parent_proc->p_cwd != NULL){
+		VOP_INCREF(parent_proc->p_cwd);
+		new_proc->p_cwd = parent_proc->p_cwd;
 	};
-	spinlock_release(&curproc->p_lock);
+	spinlock_release(&parent_proc->p_lock);
 
 	/* Add the child process to the proctable */
 
