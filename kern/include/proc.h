@@ -48,10 +48,15 @@ struct proctable *proctable;
 
 enum procstate {
 	PROC_RUNNING,
-	PROC_READY,
-	PROC_WAITING,
+	PROC_ORPHAN,
 	PROC_ZOMBIE
 };
+
+struct child_proc{
+	pid_t pid;
+	struct child_proc *next;
+};
+
 
 /*
  * Process structure.
@@ -69,6 +74,8 @@ struct proc {
 
 	/* add more material here as needed */
 	struct filetable *p_filetable;
+
+	struct child_proc *p_children;
 
 	pid_t pid; /* process id */
 	pid_t parent_pid; /* parent process id */
@@ -103,4 +110,10 @@ struct addrspace *proc_setas(struct addrspace *);
 /*  */
 int proc_fork(struct proc **child_proc);
 
+
+int proc_add_child(struct proc *proc, pid_t pid);
+
+void proc_remove_children(struct proc *proc);
+
+void proc_update_children(struct proc *proc);
 #endif /* _PROC_H_ */

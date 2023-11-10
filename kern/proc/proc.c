@@ -96,7 +96,8 @@ proc_create(const char *name)
 
 	proc->pid = 1;
 	proc->parent_pid = 0;
-
+	proc->p_status = PROC_RUNNING;
+	proc->p_children = NULL;
 
 	return proc;
 }
@@ -180,6 +181,13 @@ proc_destroy(struct proc *proc)
 		}
 		as_destroy(as);
 	}
+
+	spinlock_acquire(&proc->p_lock);
+	int numthreads = threadarray_num(&proc->p_threads);
+	for(int i = 0; i < numthreads; i++){
+		threadarray_remove(&proc->p_threads, 0);
+	}
+	spinlock_release(&proc->p_lock);
 
 	threadarray_cleanup(&proc->p_threads);
 	spinlock_cleanup(&proc->p_lock);
@@ -386,7 +394,7 @@ proc_fork(struct proc **child_proc){
 
 	new_proc->parent_pid = parent_proc->pid;
 
-	// Make sure they have the same current working directory
+	/* Make sure they have the same current working directory */
 	spinlock_acquire(&parent_proc->p_lock);
 	if (parent_proc->p_cwd != NULL){
 		VOP_INCREF(parent_proc->p_cwd);
@@ -400,7 +408,82 @@ proc_fork(struct proc **child_proc){
 	pt_add_entry(proctable, new_proc);
 	lock_release(proctable->pt_lock);
 
+	/* Add the child process to the parent's list of children */
+	spinlock_acquire(&parent_proc->p_lock);
+	result = proc_add_child(parent_proc, new_proc->pid);
+	spinlock_release(&parent_proc->p_lock);
+	
+	if(result){
+		proc_destroy(new_proc);
+		return result;
+	}
+
 	*child_proc = new_proc;
 	return 0;
-	
 }
+
+
+int 
+proc_add_child(struct proc *proc, pid_t pid){
+	KASSERT(proc != NULL);
+	KASSERT(pid > 0);
+
+	struct child_proc *new_child = kmalloc(sizeof(struct child_proc));
+	if(new_child == NULL){
+		return ENOMEM;
+	}
+
+	new_child->next = NULL;
+	new_child->pid = pid;
+
+	struct child_proc *current = proc->p_children;
+	if(current == NULL){
+		proc->p_children = new_child;
+	} else { 
+		while(current->next != NULL){
+			current = current->next;
+		}
+		current->next = new_child;
+	}	
+
+	return 0;
+}
+
+void
+proc_remove_children(struct proc *proc)
+{
+	KASSERT(proc != NULL);
+
+	struct child_proc *current = proc->p_children;
+
+	while(current != NULL){
+		struct child_proc *temp = current;
+		current = current->next;
+		kfree(temp);
+	}
+}
+
+
+void
+proc_update_children(struct proc *proc){
+	KASSERT(proc != NULL);
+
+	struct child_proc *current = proc->p_children;
+
+	while(current != NULL){
+		struct proc *current_proc = proctable->pt_entries[current->pid]->pte_proc;
+		spinlock_acquire(&current_proc->p_lock);
+		if(current_proc->p_status == PROC_RUNNING){
+			current_proc->p_status = PROC_ORPHAN;
+		}
+		spinlock_release(&current_proc->p_lock);
+
+		if(current_proc->p_status == PROC_ZOMBIE){
+			proc_destroy(current_proc);
+		}
+		current = current->next;
+	}
+
+	proc_remove_children(proc);
+}
+

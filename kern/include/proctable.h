@@ -31,7 +31,7 @@ struct proctable *pt_create(void);
 void pt_destroy(struct proctable *proctable);
 
 /* Destroy proctable entry */
-void pt_destroy_entry(struct proctable *proctable, pid_t pid);
+void pt_destroy_entry(struct pid_entry *pt_entry);
 
 /* Add entry to filetable*/
 int pt_add_entry(struct proctable *proctable, struct proc *proc);

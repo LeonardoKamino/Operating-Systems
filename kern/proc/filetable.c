@@ -35,6 +35,7 @@ ft_create(char *name)
 
     ft->ft_lk = lock_create("Filetable Lock");
     if(ft->ft_lk == NULL){
+        kfree(ft->ft_name);
 		kfree(ft);
         return NULL;
     }    
@@ -52,11 +53,11 @@ ft_destroy(struct filetable *ft)
 {
     (void)ft;
     for(int i = 0; i < OPEN_MAX; i++){
-        fte_destroy(ft->ft_entries[i]);
+        ft_remove_entry(ft, i);
     }
     lock_destroy(ft->ft_lk);
-    kfree(ft->ft_entries);
     kfree(ft->ft_name);
+    
     kfree(ft);
 }
 

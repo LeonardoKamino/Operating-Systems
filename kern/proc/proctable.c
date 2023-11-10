@@ -115,7 +115,7 @@ pt_destroy(struct proctable *proctable)
 
     for(int i = 1; i <= PID_MAX; i++) {
         if (proctable->pt_entries[i] != NULL) {
-            pt_destroy_entry(proctable, i);
+            pt_destroy_entry(proctable->pt_entries[i]);
         }
     }
 
@@ -124,13 +124,13 @@ pt_destroy(struct proctable *proctable)
 }
 
 void
-pt_destroy_entry(struct proctable *proctable, pid_t pid)
+pt_destroy_entry(struct pid_entry *pt_entry)
 {
-    lock_destroy(proctable->pt_entries[pid]->pte_lock);
-    cv_destroy(proctable->pt_entries[pid]->pte_cv);
+    lock_destroy(pt_entry->pte_lock);
+    cv_destroy(pt_entry->pte_cv);
 
-    kfree(proctable->pt_entries[pid]);
-    proctable->pt_entries[pid] = NULL;
+    kfree(pt_entry);
+    pt_entry = NULL;
 }
 
 

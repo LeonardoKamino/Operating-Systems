@@ -36,6 +36,7 @@
 #include <current.h>
 #include <syscall.h>
 #include <copyinout.h>
+#include <kern/wait.h>
 
 
 /*
@@ -85,6 +86,7 @@ syscall(struct trapframe *tf)
 	int err;
 	off_t pos;
 	int whence;
+	int exitcode;
 
 	KASSERT(curthread != NULL);
 	KASSERT(curthread->t_curspl == 0);
@@ -160,7 +162,8 @@ syscall(struct trapframe *tf)
 			err = sys_waitpid(tf->tf_a0, (int *) tf->tf_a1, tf->tf_a2, &retval1);
 			break;
 		case SYS__exit:
-			err = 0;
+			exitcode = (int) _MKWAIT_EXIT(tf->tf_a0);
+			sys___exit(exitcode);
 			break;
 
 	    default:
