@@ -41,7 +41,6 @@
 #include <sfs.h>
 #include <syscall.h>
 #include <test.h>
-#include "opt-synchprobs.h"
 #include "opt-sfs.h"
 #include "opt-net.h"
 
@@ -116,11 +115,6 @@ common_prog(int nargs, char **args)
 	struct proc *proc;
 	int result;
 
-#if OPT_SYNCHPROBS
-	kprintf("Warning: this probably won't work with a "
-		"synchronization-problems kernel.\n");
-#endif
-
 	/* Create a process for the new program to run in. */
 	proc = proc_create_runprogram(args[0] /* name */);
 	if (proc == NULL) {
@@ -136,6 +130,7 @@ common_prog(int nargs, char **args)
 		proc_destroy(proc);
 		return result;
 	}
+	while(1){}
 
 	/*
 	 * The new process will be destroyed when the program exits...
@@ -478,9 +473,9 @@ static const char *testmenu[] = {
 	"[net] Network test                  ",
 #endif
 	"[sy1] Semaphore test                ",
-	"[sy2] Lock test             (1)     ",
-	"[sy3] CV test               (1)     ",
-	"[sy4] CV test #2            (1)     ",
+	"[sy2] Lock test                     ",
+	"[sy3] CV test                       ",
+	"[sy4] CV test #2                    ",
 	"[fs1] Filesystem test               ",
 	"[fs2] FS read stress                ",
 	"[fs3] FS write stress               ",
@@ -498,8 +493,6 @@ cmd_testmenu(int n, char **a)
 	(void)a;
 
 	showmenu("OS/161 tests menu", testmenu);
-	kprintf("    (1) These tests will fail until you finish the "
-		"synch assignment.\n");
 	kprintf("\n");
 
 	return 0;
@@ -508,9 +501,6 @@ cmd_testmenu(int n, char **a)
 static const char *mainmenu[] = {
 	"[?o] Operations menu                ",
 	"[?t] Tests menu                     ",
-#if OPT_SYNCHPROBS
-	"[sp1] Air Balloon                   ",
-#endif
 	"[kh] Kernel heap stats              ",
 	"[khgen] Next kernel heap generation ",
 	"[khdump] Dump kernel heap           ",
@@ -558,11 +548,6 @@ static struct {
 	{ "q",		cmd_quit },
 	{ "exit",	cmd_quit },
 	{ "halt",	cmd_quit },
-
-#if OPT_SYNCHPROBS
-	/* in-kernel synchronization problem(s) */
-	{ "sp1",	airballoon },
-#endif
 
 	/* stats */
 	{ "kh",         cmd_kheapstats },
