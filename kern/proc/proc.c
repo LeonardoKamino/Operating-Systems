@@ -85,6 +85,11 @@ proc_create(const char *name)
 	proc->p_cwd = NULL;
 	proc->p_filetable = NULL;
 
+	proc->pid = 1;
+	proc->parent_pid = 0;
+	proc->p_status = P_RUNNING;
+	proc->p_children = NULL;
+
 	return proc;
 }
 
@@ -172,6 +177,13 @@ proc_destroy(struct proc *proc)
 		as_destroy(as);
 	}
 
+	spinlock_acquire(&proc->p_lock);
+	int numthreads = threadarray_num(&proc->p_threads);
+	for(int i = 0; i < numthreads; i++){
+		threadarray_remove(&proc->p_threads, 0);
+	}
+	spinlock_release(&proc->p_lock);
+
 	threadarray_cleanup(&proc->p_threads);
 	spinlock_cleanup(&proc->p_lock);
 
@@ -189,6 +201,14 @@ proc_bootstrap(void)
 	if (kproc == NULL) {
 		panic("proc_create for kproc failed\n");
 	}
+	proctable = pt_create();
+
+	if (proctable == NULL) {
+		panic("proctable_create failed\n");
+	}
+
+	pt_add_entry_pid(proctable, kproc, kproc->pid);
+
 }
 
 /*
@@ -204,6 +224,7 @@ struct proc *
 proc_create_runprogram(const char *name)
 {
 	struct proc *newproc;
+	int result;
 
 	newproc = proc_create(name);
 	if (newproc == NULL) {
@@ -228,6 +249,21 @@ proc_create_runprogram(const char *name)
 	}
 	spinlock_release(&curproc->p_lock);
 
+	lock_acquire(proctable->pt_lock);
+	pt_add_entry(proctable, newproc);
+	lock_release(proctable->pt_lock);
+
+	spinlock_acquire(&curproc->p_lock);
+	result = proc_add_child(curproc, newproc->pid);
+	spinlock_release(&curproc->p_lock);
+	if (result)
+	{
+		proc_destroy(newproc);
+		return NULL;
+	}
+
+	newproc->parent_pid = curproc->pid;
+
 	return newproc;
 }
 
@@ -245,21 +281,18 @@ int
 proc_fork(struct proc **ret)
 {
 	struct proc *proc;
-	struct filetable *tbl;
+	struct filetable *ft;
 	int result;
 
 	proc = proc_create(curproc->p_name);
 	if (proc == NULL) {
 		return ENOMEM;
-	}
-
-	/* VM fields */
-	/* do not clone address space -- let caller decide on that */
+	}	
 
 	/* VFS fields */
-	tbl = curproc->p_filetable;
-	if (tbl != NULL) {
-		result = filetable_copy(tbl, &proc->p_filetable);
+	ft = curproc->p_filetable;
+	if (ft != NULL) {
+		result = filetable_copy(ft, &proc->p_filetable);
 		if (result) {
 			as_destroy(proc->p_addrspace);
 			proc->p_addrspace = NULL;
@@ -275,6 +308,21 @@ proc_fork(struct proc **ret)
 		proc->p_cwd = curproc->p_cwd;
 	}
 	spinlock_release(&curproc->p_lock);
+
+	lock_acquire(proctable->pt_lock);
+	pt_add_entry(proctable, proc);
+	lock_release(proctable->pt_lock);
+
+	spinlock_acquire(&curproc->p_lock);
+	result = proc_add_child(curproc, proc->pid);
+	spinlock_release(&curproc->p_lock);
+	if (result)
+	{
+		proc_destroy(proc);
+		return result;
+	}
+
+	proc->parent_pid = curproc->pid;
 
 	*ret = proc;
 	return 0;
@@ -387,4 +435,68 @@ proc_setas(struct addrspace *newas)
 	proc->p_addrspace = newas;
 	spinlock_release(&proc->p_lock);
 	return oldas;
+}
+
+int 
+proc_add_child(struct proc *proc, pid_t pid){
+	KASSERT(proc != NULL);
+	KASSERT(pid > 0);
+
+	struct child_proc *new_child = kmalloc(sizeof(struct child_proc));
+	if(new_child == NULL){
+		return ENOMEM;
+	}
+
+	new_child->next = NULL;
+	new_child->pid = pid;
+
+	struct child_proc *current = proc->p_children;
+	if(current == NULL){
+		proc->p_children = new_child;
+	} else { 
+		while(current->next != NULL){
+			current = current->next;
+		}
+		current->next = new_child;
+	}	
+
+	return 0;
+}
+
+void
+proc_remove_children(struct proc *proc)
+{
+	KASSERT(proc != NULL);
+
+	struct child_proc *current = proc->p_children;
+
+	while(current != NULL){
+		struct child_proc *temp = current;
+		current = current->next;
+		kfree(temp);
+	}
+}
+
+void
+proc_update_children(struct proc *proc){
+	KASSERT(proc != NULL);
+
+	struct child_proc *current = proc->p_children;
+
+	while(current != NULL){
+		struct proc *current_proc = proctable->pt_entries[current->pid]->pte_proc;
+		spinlock_acquire(&current_proc->p_lock);
+		if(current_proc->p_status == P_RUNNING){
+			current_proc->p_status = P_ORPHAN;
+		}
+		spinlock_release(&current_proc->p_lock);
+
+
+		if(current_proc->p_status == P_ZOMBIE){
+			proc_destroy(current_proc);
+		}
+		current = current->next;
+	}
+
+	proc_remove_children(proc);
 }

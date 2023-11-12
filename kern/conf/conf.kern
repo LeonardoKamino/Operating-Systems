@@ -374,11 +374,13 @@ file      vfs/devnull.c
 #
 
 file      syscall/filetable.c
+file      syscall/proctable.c
 file      syscall/loadelf.c
 file      syscall/openfile.c
 file      syscall/runprogram.c
 file      syscall/file_syscalls.c
 file      syscall/time_syscalls.c
+file      syscall/proc_syscalls.c
 
 #
 # Startup and initialization
