@@ -18,8 +18,6 @@
 #include <mips/trapframe.h>
 #include <addrspace.h>
 
-void enter_fork_usermode(void *data1, unsigned long junk);
-
 void
 enter_fork_usermode(void *data1, unsigned long junk)
 {
@@ -80,10 +78,165 @@ sys_fork(struct trapframe *tf, int *retval)
 int
 sys_execv(const char *program, char **args, int *retval)
 {
-    (void) program;
-    (void) args;
-    (void) retval;
+    int program_size;
+    char *kprogram;
+    char **kargs;
+    int result;
+    int argc;
+    struct vnode *file;
+    vaddr_t entrypoint, stackptr;
+    userptr_t user_arg_addr;
+
+    *retval = -1;
+
+    if(program == NULL || args == NULL){
+        return EFAULT;
+    }
+
+    //Copy program  name into kernel space
+    program_size = (strlen(program) + 1)* sizeof(char);
+    kprogram = kmalloc(program_size);
+    if(kprogram == NULL){
+        return ENOMEM;
+    }
+
+    // Copy arguments into kernel space
+
+    result = copyinstr((const_userptr_t) program, kprogram, program_size, NULL);
+    if(result){
+        kfree(kprogram);
+        return result;
+    }
+
+    argc = count_args(args);
+
+    kargs = kmalloc((argc + 1) * sizeof(char *));
+    if(kargs == NULL){
+        kfree(kprogram);
+        return ENOMEM;
+    }
+
+    result = copy_args(args, kargs, argc);
+    if (result){
+        kfree(kprogram);
+        return result;
+    }
+
+    //Change address space
+    result = create_switch_addresspace();
+    if(result){
+        kfree_args(kargs, argc);
+        kfree(kprogram);
+        return result;
+    }
+    
+    // Open file
+    result = vfs_open(kprogram, O_RDONLY, 0, &file);
+    kfree(kprogram);
+    if(result){
+        kfree_args(kargs, argc);
+        return result;
+    }
+    
+    //Load executable
+    result = load_elf(file, &entrypoint);
+    vfs_close(file);
+    if( result ){
+        kfree_args(kargs, argc);
+        return result;
+    }
+
+    //Define stack
+    result = as_define_stack(proc_getas(), &stackptr);
+    if(result){
+        kfree_args(kargs, argc);
+        return result;
+    }
+
+
+    //Copy arguments into stack
+    user_arg_addr = 
+
+    
+    
+    // Free old arguments
+    kfree_args(kargs, argc);
+
+    // Warp to user mode
+    enter_new_process(
+        argc, 
+        user_arg_addr, 
+        NULL, 
+        stackptr, 
+        entrypoint);
     return 0;
+}
+
+int
+create_switch_addresspace(void){
+    struct addrspace *as;
+
+    as = proc_getas();
+    if(as == NULL){
+        return ENOMEM;
+    }
+
+    as_destroy(as);
+
+    /* Create a new address space. */
+	as = as_create();
+	if (as == NULL) {
+		return ENOMEM;
+	}
+
+	/* Switch to it and activate it. */
+	proc_setas(as);
+	as_activate();
+    return 0;
+}
+
+int
+copy_args(char **args, char **kargs, int argc)
+{
+    int result;
+
+    for(int i = 0; i < argc; i--){
+        kargs[i] = kmalloc((strlen(args[i]) + 1) * sizeof(char));
+        
+        if(kargs[i] == NULL){
+            kfree_args(kargs, i);
+            return ENOMEM;
+        
+        }
+
+        size_t string_size = (strlen(args[i]) + 1) * sizeof(char);
+        result = copyinstr((const_userptr_t) args[i], kargs[i], string_size, NULL);
+        if(result){
+            kfree_args(kargs, i);
+            return result;
+        }
+        kargs[i+1] = NULL; //Make sure the last element is NULL
+    }
+    return 0;
+}
+
+void
+kfree_args(char **kargs, int argc)
+{
+    for(int i = 0; i < argc; i++){
+        kfree(kargs[i]);
+    }
+    kfree(kargs);
+}
+
+int
+count_args(char **args)
+{
+    int count = 0;
+    while(args[count] != NULL){
+        count++;
+    }
+    return count;
 }
 
 int
