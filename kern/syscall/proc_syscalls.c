@@ -83,6 +83,7 @@ sys_execv(const char *program, char **args, int *retval)
     int result;
     int argc;
     struct vnode *file;
+    struct addrspace *old_addrspace;
     vaddr_t entrypoint, stackptr;
     userptr_t argv_addr;
 
@@ -111,7 +112,11 @@ sys_execv(const char *program, char **args, int *retval)
     }
 
     // Copy arguments into kernel space
-    argc = count_args(args);
+    result = count_args(args, &argc);
+    if(result){
+        kfree(kprogram);
+        return result;
+    }
 
     kargs = kmalloc((argc + 1) * sizeof(char *));
     if(kargs == NULL){
@@ -126,6 +131,10 @@ sys_execv(const char *program, char **args, int *retval)
     }
 
     //Change address space
+    old_addrspace = proc_getas();
+    if(old_addrspace == NULL){
+        return ENOMEM;
+    }
     result = create_switch_addresspace();
     if(result){
         kfree_args(kargs, argc);
@@ -138,6 +147,7 @@ sys_execv(const char *program, char **args, int *retval)
     kfree(kprogram);
     if(result){
         kfree_args(kargs, argc);
+        back_to_old_as(old_addrspace);
         return result;
     }
     
@@ -146,6 +156,7 @@ sys_execv(const char *program, char **args, int *retval)
     vfs_close(file);
     if( result ){
         kfree_args(kargs, argc);
+        back_to_old_as(old_addrspace);
         return result;
     }
 
@@ -153,6 +164,7 @@ sys_execv(const char *program, char **args, int *retval)
     result = as_define_stack(proc_getas(), &stackptr);
     if(result){
         kfree_args(kargs, argc);
+        back_to_old_as(old_addrspace);
         return result;
     }
 
@@ -160,11 +172,15 @@ sys_execv(const char *program, char **args, int *retval)
     result = copy_args_userspace(kargs, argc, &stackptr, &argv_addr);
     if(result){
         kfree_args(kargs, argc);
+        back_to_old_as(old_addrspace);
         return result;
     }   
 
     // Free old arguments
     kfree_args(kargs, argc);
+
+    //Destroy old address space
+    as_destroy(old_addrspace);
 
     // Warp to user mode
     enter_new_process(
@@ -236,16 +252,26 @@ copy_args_userspace (char **kargs,int argc , vaddr_t *stackptr, userptr_t *argv_
 	return 0;
 }
 
+void 
+back_to_old_as(struct addrspace *old_as)
+{
+     struct addrspace *current_as;
+
+    current_as = proc_getas();
+    if(current_as != NULL){
+        as_deactivate();
+        as_destroy(current_as);
+    }
+
+    proc_setas(old_as);
+    as_activate();
+}
+
 int
 create_switch_addresspace(void){
     struct addrspace *as;
 
-    as = proc_getas();
-    if(as == NULL){
-        return ENOMEM;
-    }
-
-    as_destroy(as);
+    as_deactivate();
 
     /* Create a new address space. */
 	as = as_create();
@@ -260,12 +286,18 @@ create_switch_addresspace(void){
 }
 
 int
-copy_args(char **args, char **kargs, int argc)
+copy_args(char **args, char *kargs[], int argc)
 {
     int result;
+    char check_arg;
 
-    for(int i = 0; i < argc; i++){
+    for(int i = 0; i < argc - 1; i++){
+        result = copyin((userptr_t) &args[i][0], (void *) &check_arg, (size_t) sizeof(char));
+        if (result) {
+            return result;
+        }
         size_t string_size = strlen(args[i]) + 1;
+        
         kargs[i] = kmalloc(string_size * sizeof(char));
         if(kargs[i] == NULL){
             kfree_args(kargs, i);
@@ -291,13 +323,22 @@ kfree_args(char **kargs, int argc)
 }
 
 int
-count_args(char **args)
+count_args(char **args, int *argc)
 {
-    int count = 0;
-    while(args[count] != NULL){
-        count++;
-    }
-    return count;
+    int num_args = 0;
+    int result;
+    char *check_arg;
+     do {
+		result = copyin((userptr_t) &args[num_args], (void *) &check_arg, (size_t) sizeof(char *));
+		if (result) {
+			return result;
+        }
+        num_args++;
+
+	} while (check_arg != NULL);
+
+    *argc = num_args;
+    return 0;
 }
 
 int

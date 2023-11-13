@@ -32,6 +32,8 @@
 
 
 #include <cdefs.h> /* for __DEAD */
+#include <addrspace.h>
+
 struct trapframe; /* from <machine/trapframe.h> */
 
 /*
@@ -81,7 +83,8 @@ void sys___exit(int exitcode);
 int create_switch_addresspace(void);
 void kfree_args(char **kargs, int argc);
 int copy_args(char **args, char **kargs, int argc);
-int count_args(char **args);
+int count_args(char **args, int *argc);
 int copy_args_userspace(char **kargs, int argc, vaddr_t *stackptr, userptr_t *uargs);
+void back_to_old_as(struct addrspace *old_as);
 int get_padding(int size);
 #endif /* _SYSCALL_H_ */
