@@ -78,7 +78,6 @@ sys_fork(struct trapframe *tf, int *retval)
 int
 sys_execv(const char *program, char **args, int *retval)
 {
-    int program_size;
     char *kprogram;
     char **kargs;
     int result;
@@ -94,20 +93,24 @@ sys_execv(const char *program, char **args, int *retval)
     }
 
     //Copy program  name into kernel space
-    program_size = (strlen(program) + 1)* sizeof(char);
-    kprogram = kmalloc(program_size);
+    kprogram = kmalloc(PATH_MAX * sizeof(char));
     if(kprogram == NULL){
         return ENOMEM;
     }
 
-    // Copy arguments into kernel space
-
-    result = copyinstr((const_userptr_t) program, kprogram, program_size, NULL);
+    result = copyinstr((const_userptr_t) program, kprogram, PATH_MAX * sizeof(char) + 1, NULL);
     if(result){
         kfree(kprogram);
         return result;
     }
 
+    // Check if program name is empty
+    if (program[0] == '\0'){
+        kfree(kprogram);
+        return EINVAL;
+    }
+
+    // Copy arguments into kernel space
     argc = count_args(args);
 
     kargs = kmalloc((argc + 1) * sizeof(char *));
