@@ -297,13 +297,13 @@ count_args(char **args)
     return count;
 }
 
+
 int
-sys_waitpid(pid_t pid, int *status, int options, int *retval)
+sys_waitpid(pid_t pid, int *status, int options)
 {
     (void) pid;
     (void) status;
     (void) options;
-    (void) retval;
 
     struct pid_entry * pt_entry = proctable->pt_entries[pid];
     int result;
@@ -329,7 +329,7 @@ sys_waitpid(pid_t pid, int *status, int options, int *retval)
     int exitcode = pt_entry->pte_proc->exitcode;
 
     if(status != NULL){
-        result = copyout(&exitcode, (userptr_t) status, sizeof(int));
+        result = copyout(&exitcode, (userptr_t) status, sizeof(int32_t));
         if(result){
             return result;
         }
