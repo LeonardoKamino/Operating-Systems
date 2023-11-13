@@ -81,11 +81,12 @@ sys_execv(const char *program, char **args, int *retval)
     int program_size;
     char *kprogram;
     char **kargs;
+    char **user_args;
     int result;
     int argc;
     struct vnode *file;
     vaddr_t entrypoint, stackptr;
-    userptr_t user_arg_addr;
+    userptr_t cpaddr;
 
     *retval = -1;
 
@@ -153,22 +154,57 @@ sys_execv(const char *program, char **args, int *retval)
         return result;
     }
 
+    // Copy arguments into stack
+    /* set up stack with arguments here */
+	user_args =  kmalloc(sizeof(char *) * (argc+1));
+	if (user_args==NULL)
+	{
+		kfree_args(kargs, argc);
+		return -ENOMEM;
+	}
 
-    //Copy arguments into stack
-    user_arg_addr = 
+	cpaddr = (userptr_t) stackptr;
+    
+    for(int i = 0; i < argc; i++){
+        size_t arg_size = strlen(kargs[i]) + 1;
+        cpaddr -= arg_size;
+        int tail = 0;
+		if ((int)cpaddr & 0x3)
+		{
+			tail = (int )cpaddr & 0x3;
+			cpaddr -= tail;
+		}
+        result = copyoutstr(kargs[i], (userptr_t) cpaddr, arg_size, NULL);
+        if(result){
+            kfree_args(kargs, argc);
+            kfree(user_args);
+            return result;
+        }
+        user_args[i] = (char *) cpaddr;
+    }
 
-    
-    
+	user_args[argc] = NULL;
+	cpaddr -= (sizeof(char *) * (argc) + sizeof(NULL));
+	for (int i = 0; i <= argc; i++) {
+        result = copyout(&user_args[i], (userptr_t)(cpaddr + i * sizeof(char *)), sizeof(char *));
+        if (result) {
+            kfree_args(kargs, argc);
+            kfree(user_args);
+            return result;
+        }
+    }
+
     // Free old arguments
     kfree_args(kargs, argc);
 
     // Warp to user mode
     enter_new_process(
         argc, 
-        user_arg_addr, 
+        cpaddr, 
         NULL, 
         stackptr, 
         entrypoint);
+        
     return 0;
 }
 
@@ -200,13 +236,12 @@ copy_args(char **args, char **kargs, int argc)
 {
     int result;
 
-    for(int i = 0; i < argc; i--){
+    for(int i = 0; i < argc; i++){
         kargs[i] = kmalloc((strlen(args[i]) + 1) * sizeof(char));
         
         if(kargs[i] == NULL){
             kfree_args(kargs, i);
             return ENOMEM;
-        
         }
 
         size_t string_size = (strlen(args[i]) + 1) * sizeof(char);
@@ -215,8 +250,8 @@ copy_args(char **args, char **kargs, int argc)
             kfree_args(kargs, i);
             return result;
         }
-        kargs[i+1] = NULL; //Make sure the last element is NULL
     }
+    kargs[argc] = NULL; //Make sure the last element is NULL
     return 0;
 }
 

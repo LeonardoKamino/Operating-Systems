@@ -83,5 +83,4 @@ void kfree_args(char **kargs, int argc);
 int copy_args(char **args, char **kargs, int argc);
 int count_args(char **args);
 
-
 #endif /* _SYSCALL_H_ */

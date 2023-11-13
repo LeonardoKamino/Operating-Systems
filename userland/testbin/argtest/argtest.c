@@ -44,13 +44,14 @@ main(int argc, char *argv[])
 	int i;
 
 	printf("argc: %d\n", argc);
+	printf("argv: %p\n", argv);
 
 	for (i=0; i<=argc; i++) {
 		tmp = argv[i];
 		if (tmp==NULL) {
 			tmp = "[NULL]";
 		}
-		printf("argv[%d]: %s\n", i, tmp);
+		printf("argv[%d]: %s %p\n", i, tmp, tmp);
 	}
 
 	return 0;
