@@ -38,4 +38,8 @@ int pt_add_entry(struct proctable *proctable, struct proc *proc);
 
 /* Add entry to certain PID */
 int pt_add_entry_pid(struct proctable *proctable, struct proc *proc, pid_t pid);
+
+/* Remove entry at certain PID*/
+void pt_remove_entry(struct proctable *proctable, pid_t pid);
+
 #endif /* _PROC_TABLE_H_ */

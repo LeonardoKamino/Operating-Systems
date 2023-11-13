@@ -81,12 +81,11 @@ sys_execv(const char *program, char **args, int *retval)
     int program_size;
     char *kprogram;
     char **kargs;
-    char **user_args;
     int result;
     int argc;
     struct vnode *file;
     vaddr_t entrypoint, stackptr;
-    userptr_t cpaddr;
+    userptr_t argv_addr;
 
     *retval = -1;
 
@@ -155,44 +154,11 @@ sys_execv(const char *program, char **args, int *retval)
     }
 
     // Copy arguments into stack
-    /* set up stack with arguments here */
-	user_args =  kmalloc(sizeof(char *) * (argc+1));
-	if (user_args==NULL)
-	{
-		kfree_args(kargs, argc);
-		return -ENOMEM;
-	}
-
-	cpaddr = (userptr_t) stackptr;
-    
-    for(int i = 0; i < argc; i++){
-        size_t arg_size = strlen(kargs[i]) + 1;
-        cpaddr -= arg_size;
-        int tail = 0;
-		if ((int)cpaddr & 0x3)
-		{
-			tail = (int )cpaddr & 0x3;
-			cpaddr -= tail;
-		}
-        result = copyoutstr(kargs[i], (userptr_t) cpaddr, arg_size, NULL);
-        if(result){
-            kfree_args(kargs, argc);
-            kfree(user_args);
-            return result;
-        }
-        user_args[i] = (char *) cpaddr;
-    }
-
-	user_args[argc] = NULL;
-	cpaddr -= (sizeof(char *) * (argc) + sizeof(NULL));
-	for (int i = 0; i <= argc; i++) {
-        result = copyout(&user_args[i], (userptr_t)(cpaddr + i * sizeof(char *)), sizeof(char *));
-        if (result) {
-            kfree_args(kargs, argc);
-            kfree(user_args);
-            return result;
-        }
-    }
+    result = copy_args_userspace(kargs, argc, &stackptr, &argv_addr);
+    if(result){
+        kfree_args(kargs, argc);
+        return result;
+    }   
 
     // Free old arguments
     kfree_args(kargs, argc);
@@ -200,12 +166,71 @@ sys_execv(const char *program, char **args, int *retval)
     // Warp to user mode
     enter_new_process(
         argc, 
-        cpaddr, 
+        argv_addr, 
         NULL, 
         stackptr, 
         entrypoint);
         
     return 0;
+}
+
+
+int
+get_padding(int size)
+{
+    int padding = 0;
+    if(size % 4 != 0){
+        padding = 4 - (size % 4);
+    }
+    return padding;
+}
+
+int
+copy_args_userspace (char **kargs,int argc , vaddr_t *stackptr, userptr_t *argv_addr)
+{
+	KASSERT(kargs != NULL);
+	KASSERT(stackptr != NULL);
+
+	int result;
+	size_t str_size, padding;
+	userptr_t stack_top, stack_bottom;
+    userptr_t user_arg[argc];
+
+	stack_top = (userptr_t) *stackptr;
+
+	for (int i = 0; i < argc; i++){
+		str_size = strlen(kargs[i]) + 1; // +1 for null terminator
+		padding = get_padding(str_size);
+		if (padding) {
+			stack_top -= padding;
+			bzero(stack_top, padding);
+		}
+		stack_top -= str_size;
+        // Copy string into stack
+		result = copyoutstr(kargs[i], stack_top, str_size, NULL);
+		if (result){
+            return result;
+        }
+        user_arg[i] = stack_top;
+	}
+
+    stack_bottom = stack_top - (argc + 1) * sizeof(userptr_t);
+    *argv_addr = stack_bottom;
+    *stackptr = (vaddr_t) stack_bottom;
+
+    for (int i = 0; i < argc; i++){
+        // Copy pointer to string into stack
+        result = copyout(&user_arg[i], stack_bottom, sizeof(userptr_t));
+        if (result){
+            return result;
+        }
+        stack_bottom += sizeof(userptr_t);
+    }
+
+	// Null terminate
+	bzero(stack_bottom, sizeof(userptr_t));
+
+	return 0;
 }
 
 int
@@ -237,14 +262,12 @@ copy_args(char **args, char **kargs, int argc)
     int result;
 
     for(int i = 0; i < argc; i++){
-        kargs[i] = kmalloc((strlen(args[i]) + 1) * sizeof(char));
-        
+        size_t string_size = strlen(args[i]) + 1;
+        kargs[i] = kmalloc(string_size * sizeof(char));
         if(kargs[i] == NULL){
             kfree_args(kargs, i);
             return ENOMEM;
         }
-
-        size_t string_size = (strlen(args[i]) + 1) * sizeof(char);
         result = copyinstr((const_userptr_t) args[i], kargs[i], string_size, NULL);
         if(result){
             kfree_args(kargs, i);
@@ -330,11 +353,15 @@ sys_getpid(int *retval)
 void
 sys___exit(int exitcode)
 {
-    (void) exitcode;
     struct pid_entry *pt_entry = proctable->pt_entries[curproc->pid];
 
     lock_acquire(pt_entry->pte_lock);
     proc_update_children(curproc);
+
+    spinlock_acquire(&pt_entry->pte_proc->p_lock);
+    pt_entry->pte_proc->exitcode = exitcode;
+    spinlock_release(&pt_entry->pte_proc->p_lock);
+    
     /* Process has no parent*/
     if(pt_entry->pte_proc->p_status == P_ORPHAN){        
         
@@ -345,8 +372,6 @@ sys___exit(int exitcode)
 
         cv_broadcast(pt_entry->pte_cv, pt_entry->pte_lock);
     }
-
-    pt_entry->pte_proc->exitcode = exitcode;
 
     lock_release(pt_entry->pte_lock);
 

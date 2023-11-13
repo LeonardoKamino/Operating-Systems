@@ -187,6 +187,10 @@ proc_destroy(struct proc *proc)
 	threadarray_cleanup(&proc->p_threads);
 	spinlock_cleanup(&proc->p_lock);
 
+	lock_acquire(proctable->pt_lock);
+	pt_remove_entry(proctable, proc->pid);
+	lock_release(proctable->pt_lock);
+
 	kfree(proc->p_name);
 	kfree(proc);
 }
