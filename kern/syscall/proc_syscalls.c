@@ -291,7 +291,7 @@ copy_args(char **args, char *kargs[], int argc)
     int result;
     char check_arg;
 
-    for(int i = 0; i < argc - 1; i++){
+    for(int i = 0; i < argc; i++){
         result = copyin((userptr_t) &args[i][0], (void *) &check_arg, (size_t) sizeof(char));
         if (result) {
             return result;
@@ -328,13 +328,14 @@ count_args(char **args, int *argc)
     int num_args = 0;
     int result;
     char *check_arg;
-     do {
+    do {
 		result = copyin((userptr_t) &args[num_args], (void *) &check_arg, (size_t) sizeof(char *));
 		if (result) {
 			return result;
         }
-        num_args++;
-
+        if(check_arg != NULL){
+            num_args++;
+        }   
 	} while (check_arg != NULL);
 
     *argc = num_args;
@@ -345,10 +346,6 @@ count_args(char **args, int *argc)
 int
 sys_waitpid(pid_t pid, int *status, int options)
 {
-    (void) pid;
-    (void) status;
-    (void) options;
-
     struct pid_entry * pt_entry = proctable->pt_entries[pid];
     int result;
 
