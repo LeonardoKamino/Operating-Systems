@@ -133,6 +133,8 @@ sys_execv(const char *program, char **args, int *retval)
     //Change address space
     old_addrspace = proc_getas();
     if(old_addrspace == NULL){
+        kfree_args(kargs, argc);
+        kfree(kprogram);
         return ENOMEM;
     }
     result = create_switch_addresspace();
@@ -213,7 +215,6 @@ copy_args_userspace (char **kargs,int argc , vaddr_t *stackptr, userptr_t *argv_
 	int result;
 	size_t str_size, padding;
 	userptr_t stack_top, stack_bottom;
-    userptr_t user_arg[argc];
 
 	stack_top = (userptr_t) *stackptr;
 
@@ -230,19 +231,27 @@ copy_args_userspace (char **kargs,int argc , vaddr_t *stackptr, userptr_t *argv_
 		if (result){
             return result;
         }
-        user_arg[i] = stack_top;
 	}
 
     stack_bottom = stack_top - (argc + 1) * sizeof(userptr_t);
+    stack_top = (userptr_t) *stackptr;
+
     *argv_addr = stack_bottom;
     *stackptr = (vaddr_t) stack_bottom;
 
     for (int i = 0; i < argc; i++){
+        str_size = strlen(kargs[i]) + 1; // +1 for null terminator
+		padding = get_padding(str_size);
+		if (padding) {
+			stack_top -= padding;
+		}
+		stack_top -= str_size;
         // Copy pointer to string into stack
-        result = copyout(&user_arg[i], stack_bottom, sizeof(userptr_t));
+        result = copyout(&stack_top, stack_bottom, sizeof(userptr_t));
         if (result){
             return result;
         }
+        
         stack_bottom += sizeof(userptr_t);
     }
 
