@@ -115,6 +115,12 @@ kill_curthread(vaddr_t epc, unsigned code, vaddr_t vaddr)
 
 	kprintf("Fatal user mode trap %u a83f7f0sig %d (%s, epc 0x%x, vaddr 0x%x)\n",
 		code, sig, trapcodenames[code], epc, vaddr);
+
+	/**
+	 * When a thread is killed, calls sys___exit and passes the SIG value
+	 * as the exit code so that the thread can be exited and the process 
+	 * can be turned into a ZOMBIE.
+	 */
 	sys___exit(_MKWAIT_SIG(sig));
 	//panic("I don't know how to handle this\n");
 }

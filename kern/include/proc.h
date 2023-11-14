@@ -45,12 +45,14 @@ struct vnode;
 
 struct proctable *proctable;
 
+/* The three possible states a process can be in */
 enum proc_status { 
 	P_RUNNING,
 	P_ZOMBIE,
 	P_ORPHAN
 };
 
+/* Data structure use to keep track of a parent's children processes */
 struct child_proc{
 	pid_t pid;
 	struct child_proc *next;
@@ -77,7 +79,7 @@ struct proc {
 	pid_t parent_pid; /* parent process id */
 	int exitcode; /* exit code */
 	enum proc_status p_status; /* process status */
-	struct child_proc *p_children;
+	struct child_proc *p_children; /* List of children of this process */
 
 };
 
@@ -108,10 +110,13 @@ struct addrspace *proc_getas(void);
 /* Change the address space of the current process, and return the old one. */
 struct addrspace *proc_setas(struct addrspace *);
 
+/* Add child to list of child processes */
 int  proc_add_child(struct proc *proc, pid_t pid);
 
+/* Remove all children from a list of child processes */
 void proc_remove_children(struct proc *proc);
 
+/* Update child process states when a parent is being destroyed */
 void proc_update_children(struct proc *proc);
 
 #endif /* _PROC_H_ */

@@ -7,21 +7,21 @@
 #ifndef PROCTABLE_H
 #define PROCTABLE_H
 
-
+/* Struct for the process table */
 struct proctable{
-    struct lock * pt_lock;
-    struct pid_entry * pt_entries[PID_MAX + 1];
+    struct lock * pt_lock; /* Used to lock the entire process table */
+    struct pid_entry * pt_entries[PID_MAX + 1]; /* Array of processes in the process table*/
 };
 
-
+/* An individual entry of the process table */
 struct pid_entry {
-    struct lock * pte_lock;
-    struct cv * pte_cv;
-    struct proc * pte_proc;
+    struct lock * pte_lock; /* Used to lock a specific process */
+    struct cv * pte_cv; /* Used to put processes to sleep and notify other processes of completion */
+    struct proc * pte_proc; /* The actual process of a specific entry in the process table*/
 };
 
 /**
- * Functions for the filetable 
+ * Functions for the process table 
  */
 
 /* Create proctable */

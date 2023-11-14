@@ -85,6 +85,7 @@ proc_create(const char *name)
 	proc->p_cwd = NULL;
 	proc->p_filetable = NULL;
 
+	/* Sets the process status to running and initalizes the pid values */
 	proc->pid = 1;
 	proc->parent_pid = 0;
 	proc->p_status = P_RUNNING;
@@ -177,6 +178,7 @@ proc_destroy(struct proc *proc)
 		as_destroy(as);
 	}
 
+	/* Removes all threads associated with the process */
 	spinlock_acquire(&proc->p_lock);
 	int numthreads = threadarray_num(&proc->p_threads);
 	for(int i = 0; i < numthreads; i++){
@@ -187,6 +189,7 @@ proc_destroy(struct proc *proc)
 	threadarray_cleanup(&proc->p_threads);
 	spinlock_cleanup(&proc->p_lock);
 
+	/* Removes the process from the process table at the specified pid */
 	lock_acquire(proctable->pt_lock);
 	pt_remove_entry(proctable, proc->pid);
 	lock_release(proctable->pt_lock);
@@ -201,16 +204,19 @@ proc_destroy(struct proc *proc)
 void
 proc_bootstrap(void)
 {
+	/* Creates the kernel process */
 	kproc = proc_create("[kernel]");
 	if (kproc == NULL) {
 		panic("proc_create for kproc failed\n");
 	}
-	proctable = pt_create();
 
+	/* Creates the process table */
+	proctable = pt_create();
 	if (proctable == NULL) {
 		panic("proctable_create failed\n");
 	}
 
+	/* Adds the kernel process to the process table at a specified pid */
 	pt_add_entry_pid(proctable, kproc, kproc->pid);
 
 }
@@ -253,10 +259,12 @@ proc_create_runprogram(const char *name)
 	}
 	spinlock_release(&curproc->p_lock);
 
+	/* Adds the newly created child process to the process table */
 	lock_acquire(proctable->pt_lock);
 	pt_add_entry(proctable, newproc);
 	lock_release(proctable->pt_lock);
 
+	/* Adds the child process to the parent's children list */
 	spinlock_acquire(&curproc->p_lock);
 	result = proc_add_child(curproc, newproc->pid);
 	spinlock_release(&curproc->p_lock);
@@ -266,6 +274,7 @@ proc_create_runprogram(const char *name)
 		return NULL;
 	}
 
+	/* Sets the child's parent pid */
 	newproc->parent_pid = curproc->pid;
 
 	return newproc;
@@ -293,7 +302,7 @@ proc_fork(struct proc **ret)
 		return ENOMEM;
 	}	
 
-	/* VFS fields */
+	/* Copies the parent process filetable to the child process */
 	ft = curproc->p_filetable;
 	if (ft != NULL) {
 		result = filetable_copy(ft, &proc->p_filetable);
@@ -305,18 +314,23 @@ proc_fork(struct proc **ret)
 		}
 	}
 
+
+	/*
+	 * Lock the current process to copy its current directory
+	 */
 	spinlock_acquire(&curproc->p_lock);
-	/* we don't need to lock proc->p_lock as we have the only reference */
 	if (curproc->p_cwd != NULL) {
 		VOP_INCREF(curproc->p_cwd);
 		proc->p_cwd = curproc->p_cwd;
 	}
 	spinlock_release(&curproc->p_lock);
 
+	/* Adds the newly created child process to the process table */
 	lock_acquire(proctable->pt_lock);
 	pt_add_entry(proctable, proc);
 	lock_release(proctable->pt_lock);
 
+	/* Adds the child process to the parent's children list */
 	spinlock_acquire(&curproc->p_lock);
 	result = proc_add_child(curproc, proc->pid);
 	spinlock_release(&curproc->p_lock);
@@ -326,6 +340,7 @@ proc_fork(struct proc **ret)
 		return result;
 	}
 
+	/* Sets the parent pid of the child process */
 	proc->parent_pid = curproc->pid;
 
 	*ret = proc;
@@ -441,6 +456,9 @@ proc_setas(struct addrspace *newas)
 	return oldas;
 }
 
+/**
+ * Adds a child process to the parent process's list of children
+ */
 int 
 proc_add_child(struct proc *proc, pid_t pid){
 	KASSERT(proc != NULL);
@@ -455,9 +473,15 @@ proc_add_child(struct proc *proc, pid_t pid){
 	new_child->pid = pid;
 
 	struct child_proc *current = proc->p_children;
+
+	/**
+	 * If there are no children, add an empty child to the list 
+	 * as proc represents the parent process
+	 */
 	if(current == NULL){
 		proc->p_children = new_child;
 	} else { 
+		/* Finds tail of the child process list and adds the process to it */
 		while(current->next != NULL){
 			current = current->next;
 		}
@@ -467,6 +491,10 @@ proc_add_child(struct proc *proc, pid_t pid){
 	return 0;
 }
 
+
+/**
+ * Removes all children from the parent process's list of children
+ */
 void
 proc_remove_children(struct proc *proc)
 {
@@ -481,6 +509,14 @@ proc_remove_children(struct proc *proc)
 	}
 }
 
+/**
+ * Updates the status of all children of the given process. 
+ * 
+ * This function is only ever called on sys___exit. As such, if 
+ * a parent's children are running, they are set to be ORPHANED 
+ * allowing them to continue to run whereas if they are ZOMBIES
+ * they are destroyed immediately
+ */
 void
 proc_update_children(struct proc *proc){
 	KASSERT(proc != NULL);
@@ -489,6 +525,11 @@ proc_update_children(struct proc *proc){
 
 	while(current != NULL){
 		struct proc *current_proc = proctable->pt_entries[current->pid]->pte_proc;
+
+		/**
+		 * Checks if the child process is running and sets the status
+		 * to ORPHAN if it is (as parent is now dead)
+		 */
 		spinlock_acquire(&current_proc->p_lock);
 		if(current_proc->p_status == P_RUNNING){
 			current_proc->p_status = P_ORPHAN;
@@ -496,11 +537,16 @@ proc_update_children(struct proc *proc){
 		spinlock_release(&current_proc->p_lock);
 
 
+		/** 
+		 * If a process has the ZOMBIE status, it is immediately destroyed 
+		 * as the parent no longer exists
+		 */
 		if(current_proc->p_status == P_ZOMBIE){
 			proc_destroy(current_proc);
 		}
 		current = current->next;
 	}
 
+	/* Removes all children so that the parent process can be destroyed */
 	proc_remove_children(proc);
 }

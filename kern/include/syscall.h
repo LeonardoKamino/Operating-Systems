@@ -49,6 +49,14 @@ void syscall(struct trapframe *tf);
 /* Helper for fork(). You write this. */
 void enter_fork_usermode(void *data1, unsigned long junk);
 
+int create_switch_addresspace(void);
+void kfree_args(char **kargs, int argc);
+int copy_args(char **args, char **kargs, int argc);
+int count_args(char **args, int *argc);
+int copy_args_userspace(char **kargs, int argc, vaddr_t *stackptr, userptr_t *uargs);
+void back_to_old_as(struct addrspace *old_as);
+int get_padding(int size);
+
 /* Enter user mode. Does not return. */
 __DEAD void enter_new_process(int argc, userptr_t argv, userptr_t env,
 		       vaddr_t stackptr, vaddr_t entrypoint);
@@ -80,11 +88,5 @@ int sys_waitpid(pid_t pid, int *status, int options);
 int sys_getpid(int *retval1);
 void sys___exit(int exitcode);
 
-int create_switch_addresspace(void);
-void kfree_args(char **kargs, int argc);
-int copy_args(char **args, char **kargs, int argc);
-int count_args(char **args, int *argc);
-int copy_args_userspace(char **kargs, int argc, vaddr_t *stackptr, userptr_t *uargs);
-void back_to_old_as(struct addrspace *old_as);
-int get_padding(int size);
+
 #endif /* _SYSCALL_H_ */

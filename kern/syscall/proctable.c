@@ -13,6 +13,10 @@
 #include <kern/fcntl.h>
 #include <kern/unistd.h>
 
+/**
+ * Creates the process table structure and initializes its
+ * entries to NULL
+ */
 struct 
 proctable *pt_create(void) {
     struct proctable *pt = kmalloc(sizeof(struct proctable));
@@ -33,7 +37,10 @@ proctable *pt_create(void) {
     return pt;
 }
 
-
+/**
+ * Adds an entry into the process table at the first available
+ * pid (index).
+ */
 int 
 pt_add_entry(struct proctable *proctable, struct proc *proc){
     KASSERT(proctable != NULL);
@@ -61,17 +68,24 @@ pt_add_entry(struct proctable *proctable, struct proc *proc){
     return 0;
 }
 
-
+/*
+ * Adds an entry at a specific pid in the proctable
+ */
 int 
 pt_add_entry_pid(struct proctable *proctable, struct proc *proc, pid_t pid)
 {
     KASSERT(proctable != NULL);
     KASSERT(proc != NULL);
 
+    /* Ensures that the given pid is valid */
     if (pid < 1 || pid > PID_MAX) {
         return EINVAL;
     }
 
+    /**
+     * Ensures that there is no other process that already
+     * exists at the given pid
+     */
     if (proctable->pt_entries[pid] != NULL) {
         return EEXIST;
     }
@@ -84,6 +98,7 @@ pt_add_entry_pid(struct proctable *proctable, struct proc *proc, pid_t pid)
         return ENOMEM;
     }
 
+    /* Adds the specified process at the pid in the process table */
     proctable->pt_entries[pid]->pte_proc = proc;
 
     proctable->pt_entries[pid]->pte_lock = lock_create("pte_lock");
@@ -108,6 +123,9 @@ pt_add_entry_pid(struct proctable *proctable, struct proc *proc, pid_t pid)
     return 0;
 }
 
+/**
+ * Destroys the process table and all of its entries
+ */
 void
 pt_destroy(struct proctable *proctable)
 {
@@ -123,6 +141,7 @@ pt_destroy(struct proctable *proctable)
     kfree(proctable);
 }
 
+/* Removes and destroy an entry at a specific pid in the process table*/
 void
 pt_remove_entry(struct proctable *proctable, pid_t pid)
 {
@@ -133,6 +152,7 @@ pt_remove_entry(struct proctable *proctable, pid_t pid)
     proctable->pt_entries[pid] = NULL;
 }
 
+/* Destroys an entry in the process table */
 void
 pt_destroy_entry(struct pid_entry *pt_entry)
 {
