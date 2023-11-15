@@ -49,13 +49,13 @@ void syscall(struct trapframe *tf);
 /* Helper for fork(). You write this. */
 void enter_fork_usermode(void *data1, unsigned long junk);
 
+/* Helper functions for execv() */
 int create_switch_addresspace(void);
 void kfree_args(char **kargs, int argc);
-int copy_args(char **args, char **kargs, int argc);
+int copy_args_to_kern(char **args, char **kargs, int argc);
 int count_args(char **args, int *argc);
-int copy_args_userspace(char **kargs, int argc, vaddr_t *stackptr, userptr_t *uargs);
+int copy_kargs_to_userspace_stack(char **kargs, int argc, vaddr_t *stackptr, userptr_t *uargs);
 void back_to_old_as(struct addrspace *old_as);
-int get_padding(int size);
 
 /* Enter user mode. Does not return. */
 __DEAD void enter_new_process(int argc, userptr_t argv, userptr_t env,

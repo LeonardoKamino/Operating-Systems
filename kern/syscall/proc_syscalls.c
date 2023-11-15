@@ -126,12 +126,13 @@ sys_execv(const char *program, char **args, int *retval)
         return result;
     }
 
+    /* Check if program string is empty string */
     if (program[0] == '\0'){
         kfree(kprogram);
         return EINVAL;
     }
 
-    /* Copy the arguments into kernel space */
+    /* Count number of arguments */
     result = count_args(args, &argc);
     if(result){
         kfree(kprogram);
@@ -144,14 +145,14 @@ sys_execv(const char *program, char **args, int *retval)
         return ENOMEM;
     }
 
-    /* */
-    result = copy_args(args, kargs, argc);
+    /* Copy arguments from userspace into kernel space */
+    result = copy_args_to_kern(args, kargs, argc);
     if (result){
         kfree(kprogram);
         return result;
     }
 
-    /*  */
+    /* Save old address space in case something fails */
     old_addrspace = proc_getas();
     if(old_addrspace == NULL){
         kfree_args(kargs, argc);
@@ -159,7 +160,7 @@ sys_execv(const char *program, char **args, int *retval)
         return ENOMEM;
     }
     
-    /*  */
+    /* Create and switch into a new address space */
     result = create_switch_addresspace();
     if(result){
         kfree_args(kargs, argc);
@@ -194,13 +195,14 @@ sys_execv(const char *program, char **args, int *retval)
     }
 
     /* Copy arguments into the user stack */
-    result = copy_args_userspace(kargs, argc, &stackptr, &argv_addr);
+    result = copy_kargs_to_userspace_stack(kargs, argc, &stackptr, &argv_addr);
     if(result){
         kfree_args(kargs, argc);
         back_to_old_as(old_addrspace);
         return result;
     }   
 
+    /* Free kernel arguments and destroy old address space */
     kfree_args(kargs, argc);
     as_destroy(old_addrspace);
     
@@ -216,65 +218,146 @@ sys_execv(const char *program, char **args, int *retval)
     return 0;
 }
 
+/* 
+* Count the number of arguments in args
+*/
+int
+count_args(char **args, int *argc)
+{
+    int num_args = 0;
+    int result;
+    char *check_arg;
+
+    /* Check if first argument pointer is valid */
+    result = copyin((userptr_t) &args[0], (void *) &check_arg, (size_t) sizeof(char *));
+    if (result) {
+        return result;
+    }
+
+    while(args[num_args] != NULL){
+        num_args++;
+
+        /* Check if next argument pointer is valid */
+        result = copyin((userptr_t) &args[num_args], (void *) &check_arg, (size_t) sizeof(char *));
+		if (result) {
+			return result;
+        }
+    }
+
+    *argc = num_args;
+    return 0;
+}
+
+/*
+* Function to copy arguments from user space to kernel space
+*/
+int
+copy_args_to_kern(char **args, char *kargs[], int argc)
+{
+    int result;
+    char check_arg;
+    size_t arg_len;
+
+    for(int i = 0; i < argc; i++){
+        /* Check if the argument string is a valid, copyin will fail if it is not valid */
+        result = copyin((userptr_t) &args[i][0], (void *) &check_arg, (size_t) sizeof(char));
+        if (result) {
+            return result;
+        }
+        arg_len = strlen(args[i]) + 1;
+        
+        kargs[i] = kmalloc(arg_len * sizeof(char));
+        if(kargs[i] == NULL){
+            kfree_args(kargs, i);
+            return ENOMEM;
+        }
+        result = copyinstr((const_userptr_t) args[i], kargs[i], arg_len, NULL);
+        if(result){
+            kfree_args(kargs, i);
+            return result;
+        }
+    }
+    kargs[argc] = NULL; //Make sure the last element is NULL
+    return 0;
+}
 
 
 int
-copy_args_userspace (char **kargs, int argc, vaddr_t *stackptr, userptr_t *argv_addr)
+copy_kargs_to_userspace_stack (char **kargs, int argc, vaddr_t *stackptr, userptr_t *argv_addr)
 {
 	KASSERT(kargs != NULL);
 	KASSERT(stackptr != NULL);
 
 	int result;
-	size_t str_size, padding;
-	userptr_t stack_top, stack_bottom;
+	size_t arg_len, padding;
+	userptr_t top, bottom;
 
-	stack_top = (userptr_t) *stackptr;
+	top = (userptr_t) *stackptr;
 
+    /* 
+    * First copy arguments strings into stack
+    * Strings are allocated in order from top to bottom
+    */
 	for (int i = 0; i < argc; i++){
-		str_size = strlen(kargs[i]) + 1; // +1 for null terminator
-		if(str_size % 4 != 0){
-            padding = 4 - (str_size % 4);
+		arg_len = strlen(kargs[i]) + 1; // +1 for null terminator
+
+        /* Consider needing for alignment */
+		if(arg_len % 4 != 0){
+            padding = 4 - (arg_len % 4);
+            top = top - padding;
+            /* Zero out padding */
+			bzero(top, padding);
         }
-		if (padding) {
-			stack_top -= padding;
-			// bzero(stack_top, padding);
-		}
-		stack_top -= str_size;
-        // Copy string into stack
-		result = copyoutstr(kargs[i], stack_top, str_size, NULL);
+		top = top - arg_len;
+
+        /* Copy string into stack */
+		result = copyoutstr(kargs[i], top, arg_len, NULL);
 		if (result){
             return result;
         }
 	}
 
-    stack_bottom = stack_top - (argc + 1) * sizeof(userptr_t);
-    stack_top = (userptr_t) *stackptr;
+    bottom = top - (argc + 1) * sizeof(userptr_t);
+    top = (userptr_t) *stackptr;
 
-    *argv_addr = stack_bottom;
-    *stackptr = (vaddr_t) stack_bottom;
+    *argv_addr = bottom;
+    *stackptr = (vaddr_t) bottom;
 
+    /*
+    * Then copy pointers to strings into stack
+    * Pointers are allocated in order from bottom to top
+    */
     for (int i = 0; i < argc; i++){
-        str_size = strlen(kargs[i]) + 1; // +1 for null terminator
-		padding = get_padding(str_size);
-		if (padding) {
-			stack_top -= padding;
-		}
-		stack_top -= str_size;
-        // Copy pointer to string into stack
-        result = copyout(&stack_top, stack_bottom, sizeof(userptr_t));
+        /* Calculate starting location of string, setting top to it */
+        arg_len = strlen(kargs[i]) + 1; // +1 for null terminator
+
+        /* Consider alignment */
+		if(arg_len % 4 != 0){
+            padding = 4 - (arg_len % 4);
+            top = top - padding;
+        }
+
+		top = top - arg_len;
+
+        /* Copy string pointer into bottom */
+        result = copyout(&top, bottom, sizeof(userptr_t));
         if (result){
             return result;
         }
         
-        stack_bottom += sizeof(userptr_t);
+        bottom = bottom + sizeof(userptr_t);
     }
 
-	// Null terminate
-	bzero(stack_bottom, sizeof(userptr_t));
+	/* Null terminate */
+	bzero(bottom, sizeof(userptr_t));
 
 	return 0;
 }
 
+/* 
+*  Function to return to old address space in case something 
+*  fails during execv
+*/
 void 
 back_to_old_as(struct addrspace *old_as)
 {
@@ -290,10 +373,15 @@ back_to_old_as(struct addrspace *old_as)
     as_activate();
 }
 
+/*
+* Function to create a new address space and switch to it
+* deactivating old address space
+*/
 int
 create_switch_addresspace(void){
     struct addrspace *as;
 
+    /* Deactivate current address space */
     as_deactivate();
 
     /* Create a new address space. */
@@ -308,34 +396,9 @@ create_switch_addresspace(void){
     return 0;
 }
 
-int
-copy_args(char **args, char *kargs[], int argc)
-{
-    int result;
-    char check_arg;
-
-    for(int i = 0; i < argc; i++){
-        result = copyin((userptr_t) &args[i][0], (void *) &check_arg, (size_t) sizeof(char));
-        if (result) {
-            return result;
-        }
-        size_t string_size = strlen(args[i]) + 1;
-        
-        kargs[i] = kmalloc(string_size * sizeof(char));
-        if(kargs[i] == NULL){
-            kfree_args(kargs, i);
-            return ENOMEM;
-        }
-        result = copyinstr((const_userptr_t) args[i], kargs[i], string_size, NULL);
-        if(result){
-            kfree_args(kargs, i);
-            return result;
-        }
-    }
-    kargs[argc] = NULL; //Make sure the last element is NULL
-    return 0;
-}
-
+/*
+* Function to deallocate kargs and all arguments in it
+*/
 void
 kfree_args(char **kargs, int argc)
 {
@@ -345,26 +408,6 @@ kfree_args(char **kargs, int argc)
     kfree(kargs);
 }
 
-/**/
-int
-count_args(char **args, int *argc)
-{
-    int num_args = 0;
-    int result;
-    char *check_arg;
-    do {
-		result = copyin((userptr_t) &args[num_args], (void *) &check_arg, (size_t) sizeof(char *));
-		if (result) {
-			return result;
-        }
-        if(check_arg != NULL){
-            num_args++;
-        }   
-	} while (check_arg != NULL);
-
-    *argc = num_args;
-    return 0;
-}
 
 /**
  * Waits for the process specified by the pid to exit and 
