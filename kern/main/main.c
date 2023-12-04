@@ -99,7 +99,7 @@ boot(void)
 
 	kprintf("\n");
 	kprintf("OS/161 base system version %s\n", BASE_VERSION);
-	kprintf("(with locks/CVs, file/proc system calls solutions)\n");
+	kprintf("(with locks/CVs, system calls solutions)\n");
 	kprintf("%s", harvard_copyright);
 	kprintf("\n");
 
@@ -129,6 +129,7 @@ boot(void)
 	/* Late phase of initialization. */
 	vm_bootstrap();
 	kprintf_bootstrap();
+	exec_bootstrap();
 	thread_start_cpus();
 
 	/* Default bootfs - but ignore failure, in case emu0 doesn't exist */
