@@ -256,7 +256,6 @@ proc_create_runprogram(const char *name, struct proc **ret)
 int
 proc_fork(struct proc **ret)
 {
-	struct proc *proc;
 	struct proc *newproc;
 	struct addrspace *as;
 	struct filetable *tbl;

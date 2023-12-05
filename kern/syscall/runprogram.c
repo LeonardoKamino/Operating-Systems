@@ -503,7 +503,6 @@ runprogram(char *progname)
 
 		result = open_stdfds("con:", "con:", "con:");
 		if (result) {
-			vfs_close(v);
 			return result;
 		}
 	}
