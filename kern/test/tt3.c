@@ -37,7 +37,6 @@
 #include <synch.h>
 #include <test.h>
 
-#include "opt-synchprobs.h"
 
 /* dimension of matrices (cannot be too large or will overflow stack) */
 

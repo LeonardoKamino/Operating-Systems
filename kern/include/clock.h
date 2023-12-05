@@ -36,8 +36,6 @@
 
 #include <kern/time.h>
 
-#include "opt-synchprobs.h"
-
 
 /*
  * hardclock() is called on every CPU HZ times a second, possibly only
