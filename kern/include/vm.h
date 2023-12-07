@@ -41,7 +41,7 @@
 
 
 #define DUMBVM_STACKPAGES    18
-
+#define PAGE_TABLE_ENTRIES   1024
 
 /* Fault-type arguments to vm_fault() */
 #define VM_FAULT_READ        0    /* A read was attempted */
