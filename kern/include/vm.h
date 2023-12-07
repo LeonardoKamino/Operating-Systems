@@ -39,6 +39,10 @@
 
 #include <machine/vm.h>
 
+
+#define DUMBVM_STACKPAGES    18
+
+
 /* Fault-type arguments to vm_fault() */
 #define VM_FAULT_READ        0    /* A read was attempted */
 #define VM_FAULT_WRITE       1    /* A write was attempted */
@@ -58,6 +62,9 @@ void free_kpages(vaddr_t addr);
 /* TLB shootdown handling called from interprocessor_interrupt */
 void vm_tlbshootdown_all(void);
 void vm_tlbshootdown(const struct tlbshootdown *);
+
+/* Temporary just to have something compile */
+paddr_t getppages(unsigned long npages);
 
 
 #endif /* _VM_H_ */
