@@ -51,15 +51,17 @@ as_create(void)
 		return NULL;
 	}
 
-	as->regions = NULL;
+	as->regions = NULL; /* At start no regions in addrespace */
+
+	/* Create page directory */
 	as->pd = kmalloc(sizeof(struct pagedirectory));
 	if(as->pd == NULL) {
 		kfree(as);
 		return NULL;
 	}
 
+	/* Initialize page directory */
 	as->pd->pagetables = kmalloc(sizeof(struct pagetable *) * PAGE_TABLE_ENTRIES);
-
 	for(int i = 0; i < PAGE_TABLE_ENTRIES; i++) {
 		as->pd->pagetables[i] = NULL;
 	}
@@ -71,12 +73,14 @@ void
 as_destroy(struct addrspace *as)
 {
 
+	/* Free page tables */
 	for(int i = 0; i < PAGE_TABLE_ENTRIES; i++) {
 		if(as->pd->pagetables[i] != NULL) {
 			kfree(as->pd->pagetables[i]);
 		}
 	}
 
+	/* Free page directory */
 	kfree(as->pd->pagetables);
 	kfree(as->pd);
 
@@ -120,6 +124,9 @@ as_deactivate(void)
 	splx(spl);
 }
 
+/* Define a region in the address space 
+*  The new region will be the head of the linked list of regions of this addrespace
+*/
 int
 as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 		 int readable, int writeable, int executable)
@@ -213,6 +220,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		return ENOMEM;
 	}
 
+	/* Copy regions by defining new regions on new addresspace*/
 	struct region *region = old->regions;
 
 	while(region != NULL) {
@@ -224,6 +232,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		region = region->next;
 	};
 
+	/* Copy page directory */
 	for(int i = 0; i < PAGE_TABLE_ENTRIES; i++) {
 		if(old->pd->pagetables[i] != NULL) {
 			struct pagetable *new_pt = kmalloc(sizeof(struct pagetable));

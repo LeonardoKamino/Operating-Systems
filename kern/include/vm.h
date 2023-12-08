@@ -65,12 +65,15 @@ void vm_tlbshootdown(const struct tlbshootdown *);
 /* Temporary just to have something compile */
 paddr_t getppages(unsigned long npages);
 
+/* Initialize coremap */
 void coremap_init(void);
+
+/* Find free space in coremap */
 int find_free_space(int npages);
 
 struct cm_entry {
-    bool is_free;
-    bool is_end_malloc;
+    bool is_free; // Flag to indicate if page is free
+    bool is_end_malloc; // Flag to indicate if page is the last page of a malloc
 };
 
 struct coremap{

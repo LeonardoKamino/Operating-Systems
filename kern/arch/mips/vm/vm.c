@@ -58,17 +58,16 @@
  * Wrap ram_stealmem in a spinlock.
  */
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
-struct coremap cm;
-volatile int coremap_pages;
+struct coremap cm; /* Keep track of physical memory */ 
+volatile int coremap_pages; /* Number of pages being tracked by coremap */
 struct spinlock cm_lock;
 
 
 void coremap_init()
 {
-	// cm = kmalloc(sizeof(cm));	
-	paddr_t ramsize = ram_getsize();
+	paddr_t ramsize = ram_getsize(); // Get the size of physical memory
 
-	coremap_pages = ramsize / PAGE_SIZE;
+	coremap_pages = ramsize / PAGE_SIZE; // Calculate number of pages that fits in physical memory
 	
 
 	paddr_t firstpaddr = ram_getfirstfree();
@@ -76,7 +75,8 @@ void coremap_init()
 	cm.cm_entries = (struct cm_entry *) PADDR_TO_KVADDR(firstpaddr);
 
 	spinlock_init(&cm_lock);
-
+	
+	/* Initiate entries for coremap */
 	struct cm_entry cm_entry;
 	for (int i = 0; i < coremap_pages; i++)
 	{
@@ -85,7 +85,7 @@ void coremap_init()
 		memmove(&cm.cm_entries[i], &cm_entry, sizeof(cm_entry));
 	}
 
-
+	/* Mark pages used by kernel and coremap as used */
 	uint32_t i;
 	for (i = 0; i < (firstpaddr + (coremap_pages * sizeof(struct cm_entry))) / PAGE_SIZE + 1; i++)
 	{
@@ -95,12 +95,10 @@ void coremap_init()
 
 void vm_bootstrap(void)
 {
-	/* Do nothing. */
 	coremap_init();
 }
 
-paddr_t
-getppages(unsigned long npages)
+paddr_t getppages(unsigned long npages)
 {
 	paddr_t addr;
 
@@ -112,6 +110,11 @@ getppages(unsigned long npages)
 	return addr;
 }
 
+/*
+* Find the free space in coremap that fits npages
+* Return the index of the first page in the free space
+* Return -1 if no free space is found
+*/
 int find_free_space(int npages)
 {
 	int free_pages = 0;
@@ -139,40 +142,38 @@ int find_free_space(int npages)
 	return -1;
 } 
 
-/* Allocate/free some kernel-space virtual pages */
+/* Allocate some kernel-space virtual pages */
 vaddr_t
 alloc_kpages(unsigned npages)
 {
-
-
 	paddr_t paddr;
+	/* If coremap is not initialized use ram_stealmem*/
 	if (cm.cm_entries == NULL)
 	{
-		spinlock_acquire(&stealmem_lock);
-		paddr = ram_stealmem(npages);
-		spinlock_release(&stealmem_lock);
+		paddr = getppages(npages);
 	}
 	else
 	{
 		spinlock_acquire(&cm_lock);
 
-		int first_free = find_free_space(npages);
+		int first_free_index = find_free_space(npages);
 
-		if (first_free == -1)
+		if (first_free_index == -1)
 		{
 			spinlock_release(&cm_lock);
 			return 0;
 		}
 
-		paddr = first_free * PAGE_SIZE;
+		paddr = first_free_index * PAGE_SIZE;
 
-		for (int i = first_free; i < first_free + (int) npages; i++)
+		for (int i = first_free_index; i < first_free_index + (int) npages; i++)
 		{
 			cm.cm_entries[i].is_free = false;
 			cm.cm_entries[i].is_end_malloc = false;
 		}
-
-		cm.cm_entries[first_free + (int) npages - 1].is_end_malloc = true;
+		
+		/* Set last entry as final page of allocation block*/
+		cm.cm_entries[first_free_index + (int) npages - 1].is_end_malloc = true;
 
 		spinlock_release(&cm_lock);
 	}
@@ -182,6 +183,7 @@ alloc_kpages(unsigned npages)
 	return PADDR_TO_KVADDR(paddr);
 }
 
+/* Free some kernel-space virtual pages */
 void free_kpages(vaddr_t addr)
 {
 	paddr_t paddr = KVADDR_TO_PADDR(addr);
@@ -190,6 +192,7 @@ void free_kpages(vaddr_t addr)
 
 	int index = paddr / PAGE_SIZE;
 
+	/* Free all successive pages until the final page of an allocation block*/
 	while(!cm.cm_entries[index].is_free)
 	{
 		cm.cm_entries[index].is_free = true;
@@ -258,14 +261,19 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 		return EFAULT;
 	}
 
-	// Extract the 10 most significant bits (bits 22-31)
+	/* Extract the 10 most significant bits of fault address 
+	*  Used as index for 1st level page table (page directory)
+	*/
 	unsigned int msb = (faultaddress >> 22) & 0x3FF; // 0x3FF is the mask for 10 bits
 
-	// Extract bits 11-20
+	/* Extract the 10 middle bits of fault address 
+	*  Used as index for 2nd level page table
+	*/
 	unsigned int mid = (faultaddress >> 12) & 0x3FF; // Shift right by 12 and mask
 
 	struct pagedirectory *pd = as->pd;
 
+	/* Create 2nd level page table if it is not yet created */
 	if (pd->pagetables[msb] == NULL)
 	{
 		pd->pagetables[msb] = kmalloc(sizeof(struct pagetable));
@@ -274,25 +282,31 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 			return ENOMEM;
 		}
 
+		/* Initialize 2nd level page table */
 		for (int i = 0; i < PAGE_TABLE_ENTRIES; i++)
 		{
 			pd->pagetables[msb]->entries[i] = 0;
 		}
 	}
 
+	/* Check if page is in page table */
 	if (pd->pagetables[msb]->entries[mid] == 0)
 	{
 		struct region *region = as->regions;
 
 		while (region != NULL)
 		{
+			/* Check if fault address is within region */
 			if (faultaddress >= region->vbase && faultaddress <= (region->vbase + region->npages * PAGE_SIZE))
 			{
+				/* Allocate new physical page */
 				vaddr_t new_page = alloc_kpages(1);
 				if (new_page == 0)
 				{
 					return ENOMEM;
 				}
+
+				/* Add new page translation to page table */
 				if (region->writeable)
 				{
 					pd->pagetables[msb]->entries[mid] = PADDR_TO_KVADDR(new_page & PAGE_FRAME) | TLBLO_DIRTY | TLBLO_VALID;
@@ -310,10 +324,16 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 			}
 		}
 
+		/* If fault address is not within any valid region
+		*  so no page was allocated 
+		*  return EFAULT to indicate invalid memory
+		*/
 		if (pd->pagetables[msb]->entries[mid] == 0)
 		{
 			return EFAULT;
 		}
+	}else{
+		paddr = pd->pagetables[msb]->entries[mid];
 	}
 
 	/* make sure it's page-aligned */
