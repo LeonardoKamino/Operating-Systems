@@ -51,13 +51,20 @@ as_create(void)
 		return NULL;
 	}
 
-	as->as_vbase1 = 0;
-	as->as_pbase1 = 0;
-	as->as_npages1 = 0;
-	as->as_vbase2 = 0;
-	as->as_pbase2 = 0;
-	as->as_npages2 = 0;
-	as->as_stackpbase = 0;
+	as->regions = NULL; /* At start no regions in addrespace */
+
+	/* Create page directory */
+	as->pd = kmalloc(sizeof(struct pagedirectory));
+	if(as->pd == NULL) {
+		kfree(as);
+		return NULL;
+	}
+
+	/* Initialize page directory */
+	as->pd->pagetables = kmalloc(sizeof(struct pagetable *) * PAGE_TABLE_ENTRIES);
+	for(int i = 0; i < PAGE_TABLE_ENTRIES; i++) {
+		as->pd->pagetables[i] = NULL;
+	}
 
 	return as;
 }
@@ -65,6 +72,25 @@ as_create(void)
 void
 as_destroy(struct addrspace *as)
 {
+
+	/* Free page tables */
+	for(int i = 0; i < PAGE_TABLE_ENTRIES; i++) {
+		if(as->pd->pagetables[i] != NULL) {
+			kfree(as->pd->pagetables[i]);
+		}
+	}
+
+	/* Free page directory */
+	kfree(as->pd->pagetables);
+	kfree(as->pd);
+
+	struct region *region = as->regions;
+	while(region != NULL) {
+		struct region *next = region->next;
+		kfree(region);
+		region = next;
+	}
+
 	kfree(as);
 }
 
@@ -72,18 +98,12 @@ void
 as_activate(void)
 {
 	int i, spl;
-	struct addrspace *as;
-
-	as = proc_getas();
-	if (as == NULL) {
-		return;
-	}
 
 	/* Disable interrupts on this CPU while frobbing the TLB. */
 	spl = splhigh();
 
 	for (i=0; i<NUM_TLB; i++) {
-		tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
+		tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i); //Check this
 	}
 
 	splx(spl);
@@ -92,9 +112,21 @@ as_activate(void)
 void
 as_deactivate(void)
 {
-	/* nothing */
+	int i, spl;
+
+	/* Disable interrupts on this CPU while frobbing the TLB. */
+	spl = splhigh();
+
+	for (i=0; i<NUM_TLB; i++) {
+		tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i); //Check this
+	}
+
+	splx(spl);
 }
 
+/* Define a region in the address space 
+*  The new region will be the head of the linked list of regions of this addrespace
+*/
 int
 as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 		 int readable, int writeable, int executable)
@@ -110,28 +142,22 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 
 	npages = sz / PAGE_SIZE;
 
-	/* We don't use these - all pages are read-write */
-	(void)readable;
-	(void)writeable;
-	(void)executable;
-
-	if (as->as_vbase1 == 0) {
-		as->as_vbase1 = vaddr;
-		as->as_npages1 = npages;
-		return 0;
+	struct region *region = kmalloc(sizeof(struct region));
+	if(region == NULL) {
+		return ENOMEM;
 	}
 
-	if (as->as_vbase2 == 0) {
-		as->as_vbase2 = vaddr;
-		as->as_npages2 = npages;
-		return 0;
-	}
+	region->vbase = vaddr;
+	region->npages = npages;
+	region->readable = readable;
+	region->writeable = writeable;
+	region->og_writeable = writeable;
+	region->executable = executable;
+	region->next = as->regions;
 
-	/*
-	 * Support for more than two regions is not available.
-	 */
-	kprintf("dumbvm: Warning: too many regions\n");
-	return ENOSYS;
+	as->regions = region;
+
+	return 0;
 }
 
 static
@@ -141,49 +167,47 @@ as_zero_region(paddr_t paddr, unsigned npages)
 	bzero((void *)PADDR_TO_KVADDR(paddr), npages * PAGE_SIZE);
 }
 
+/* Make read only regions into writable */
 int
 as_prepare_load(struct addrspace *as)
 {
-	KASSERT(as->as_pbase1 == 0);
-	KASSERT(as->as_pbase2 == 0);
-	KASSERT(as->as_stackpbase == 0);
-
-	as->as_pbase1 = getppages(as->as_npages1);
-	if (as->as_pbase1 == 0) {
-		return ENOMEM;
+	struct region *region = as->regions;
+	while(region != NULL) {
+		if(region->writeable == 0) {
+			region->writeable = 1;
+			as_zero_region(region->vbase, region->npages);
+		}
+		region = region->next;
 	}
-
-	as->as_pbase2 = getppages(as->as_npages2);
-	if (as->as_pbase2 == 0) {
-		return ENOMEM;
-	}
-
-	as->as_stackpbase = getppages(DUMBVM_STACKPAGES);
-	if (as->as_stackpbase == 0) {
-		return ENOMEM;
-	}
-
-	as_zero_region(as->as_pbase1, as->as_npages1);
-	as_zero_region(as->as_pbase2, as->as_npages2);
-	as_zero_region(as->as_stackpbase, DUMBVM_STACKPAGES);
-
 	return 0;
 }
 
+/* Restore read only regions state */
 int
 as_complete_load(struct addrspace *as)
 {
-	(void)as;
+	struct region *region = as->regions;
+	while(region != NULL) {
+		if(region->og_writeable == 0) {
+			region->writeable = 0;
+		}
+		region = region->next;
+	}
 	return 0;
 }
 
 int
 as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 {
-	KASSERT(as->as_stackpbase != 0);
-
 	*stackptr = USERSTACK;
-	return 0;
+
+	int result = as_define_region(as, USERSTACK - STACK_SIZE, STACK_SIZE, 1, 1, 1);
+    if (result) {
+        return result;
+    }
+    
+
+    return 0;
 }
 
 int
@@ -196,32 +220,35 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		return ENOMEM;
 	}
 
-	new->as_vbase1 = old->as_vbase1;
-	new->as_npages1 = old->as_npages1;
-	new->as_vbase2 = old->as_vbase2;
-	new->as_npages2 = old->as_npages2;
+	/* Copy regions by defining new regions on new addresspace*/
+	struct region *region = old->regions;
 
-	/* (Mis)use as_prepare_load to allocate some physical memory. */
-	if (as_prepare_load(new)) {
-		as_destroy(new);
-		return ENOMEM;
+	while(region != NULL) {
+		int result = as_define_region(new, region->vbase, region->npages * PAGE_SIZE, region->readable, region->writeable, region->executable);
+		if(result) {
+			as_destroy(new);
+			return result;
+		}
+		region = region->next;
+	};
+
+	/* Copy page directory */
+	for(int i = 0; i < PAGE_TABLE_ENTRIES; i++) {
+		if(old->pd->pagetables[i] != NULL) {
+			struct pagetable *new_pt = kmalloc(sizeof(struct pagetable));
+			if(new_pt == NULL) {
+				as_destroy(new);
+				return ENOMEM;
+			}
+
+			for(int j = 0; j < PAGE_TABLE_ENTRIES; j++) {
+				new_pt->entries[j] = old->pd->pagetables[i]->entries[j];
+			}
+
+			new->pd->pagetables[i] = new_pt;
+		}
 	}
 
-	KASSERT(new->as_pbase1 != 0);
-	KASSERT(new->as_pbase2 != 0);
-	KASSERT(new->as_stackpbase != 0);
-
-	memmove((void *)PADDR_TO_KVADDR(new->as_pbase1),
-		(const void *)PADDR_TO_KVADDR(old->as_pbase1),
-		old->as_npages1*PAGE_SIZE);
-
-	memmove((void *)PADDR_TO_KVADDR(new->as_pbase2),
-		(const void *)PADDR_TO_KVADDR(old->as_pbase2),
-		old->as_npages2*PAGE_SIZE);
-
-	memmove((void *)PADDR_TO_KVADDR(new->as_stackpbase),
-		(const void *)PADDR_TO_KVADDR(old->as_stackpbase),
-		DUMBVM_STACKPAGES*PAGE_SIZE);
 
 	*ret = new;
 	return 0;

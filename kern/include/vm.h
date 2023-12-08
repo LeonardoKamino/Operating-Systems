@@ -41,13 +41,12 @@
 
 
 #define DUMBVM_STACKPAGES    18
-
+#define PAGE_TABLE_ENTRIES   1024
 
 /* Fault-type arguments to vm_fault() */
 #define VM_FAULT_READ        0    /* A read was attempted */
 #define VM_FAULT_WRITE       1    /* A write was attempted */
 #define VM_FAULT_READONLY    2    /* A write to a readonly page was attempted*/
-
 
 /* Initialization function */
 void vm_bootstrap(void);
@@ -65,6 +64,22 @@ void vm_tlbshootdown(const struct tlbshootdown *);
 
 /* Temporary just to have something compile */
 paddr_t getppages(unsigned long npages);
+
+/* Initialize coremap */
+void coremap_init(void);
+
+/* Find free space in coremap */
+int find_free_space(int npages);
+
+struct cm_entry {
+    bool is_free; // Flag to indicate if page is free
+    bool is_end_malloc; // Flag to indicate if page is the last page of a malloc
+};
+
+struct coremap{
+    struct cm_entry *cm_entries;
+};
+
 
 
 #endif /* _VM_H_ */

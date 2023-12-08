@@ -48,6 +48,24 @@ struct vnode;
  * You write this.
  */
 
+struct pagetable {
+    paddr_t entries[PAGE_TABLE_ENTRIES]; // Array of page table entries
+};
+
+struct pagedirectory {
+    struct pagetable **pagetables; // Array of page directory entries
+};
+
+struct region {
+    vaddr_t vbase; // Virtual base address
+    size_t npages; // Number of pages in the region
+    int readable; // Readable
+    int writeable; // Writeable
+    int og_writeable; // Original writeable
+    int executable; // Executable
+    struct region *next; // Next region
+};
+
 struct addrspace {
 #if OPT_DUMBVM
         vaddr_t as_vbase1;
@@ -59,6 +77,9 @@ struct addrspace {
         paddr_t as_stackpbase;
 #else
         /* Put stuff here for your VM system */
+        struct region *regions;
+        struct pagedirectory *pd;
+
         vaddr_t as_vbase1;
         paddr_t as_pbase1;
         size_t as_npages1;
