@@ -48,7 +48,6 @@
 #define VM_FAULT_WRITE       1    /* A write was attempted */
 #define VM_FAULT_READONLY    2    /* A write to a readonly page was attempted*/
 
-
 /* Initialization function */
 void vm_bootstrap(void);
 
@@ -65,6 +64,19 @@ void vm_tlbshootdown(const struct tlbshootdown *);
 
 /* Temporary just to have something compile */
 paddr_t getppages(unsigned long npages);
+
+void coremap_init(void);
+int find_free_space(int npages);
+
+struct cm_entry {
+    bool is_free;
+    bool is_end_malloc;
+};
+
+struct coremap{
+    struct cm_entry *cm_entries;
+};
+
 
 
 #endif /* _VM_H_ */
