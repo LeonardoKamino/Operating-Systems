@@ -43,6 +43,12 @@
 #include <copyinout.h>
 #include <pid.h>
 #include <syscall.h>
+#include <spl.h>
+#include <spinlock.h>
+#include <mips/tlb.h>
+#include <addrspace.h>
+#include <vm.h>
+#include <synch.h>
 
 /* note that sys_execv is in runprogram.c */
 
@@ -157,3 +163,42 @@ sys_waitpid(pid_t pid, userptr_t retstatus, int flags, pid_t *retval)
 	}
 	return result;
 }
+
+// int sys_sbrk(intptr_t amount, int32_t *retval){
+//     struct addrspace *as;
+
+// 	*retval = (intptr_t)((void *) -1);
+
+// 	as = proc_getas();
+// 	if (as == NULL) {
+// 		return EFAULT;
+// 	}
+
+// 	/* Ensure that the amount is page aligned as per the manual*/
+// 	if(amount % PAGE_SIZE != 0){
+// 		return EINVAL;
+// 	}
+	
+// 	size_t old_heap_end = as->heap->vbase + as->heap->npages * PAGE_SIZE;
+
+// 	if(amount == 0){
+// 		*retval = old_heap_end;
+// 		return 0;
+// 	}
+
+// 	size_t new_heap_end = old_heap_end + amount;
+
+// 	if(new_heap_end < as->heap->vbase){
+// 		return EINVAL;
+// 	}
+
+// 	if(new_heap_end > USERSTACK){
+// 		return ENOMEM;
+// 	}
+
+// 	*retval = old_heap_end;
+// 	as->heap->npages += (amount) / PAGE_SIZE;
+
+// 	return 0;
+// }
+

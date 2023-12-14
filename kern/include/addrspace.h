@@ -79,6 +79,7 @@ struct addrspace {
         /* Put stuff here for your VM system */
         struct region *regions;
         struct pagedirectory *pd;
+        struct region *heap;
 
         vaddr_t as_vbase1;
         paddr_t as_pbase1;

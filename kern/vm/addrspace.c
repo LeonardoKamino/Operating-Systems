@@ -84,6 +84,8 @@ as_destroy(struct addrspace *as)
 	kfree(as->pd->pagetables);
 	kfree(as->pd);
 
+	kfree(as->heap);
+
 	struct region *region = as->regions;
 	while(region != NULL) {
 		struct region *next = region->next;
@@ -179,6 +181,7 @@ as_prepare_load(struct addrspace *as)
 		}
 		region = region->next;
 	}
+
 	return 0;
 }
 
@@ -249,6 +252,14 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		}
 	}
 
+	/* Copies over heap information from old addrspace to new one*/
+	// new->heap = kmalloc(sizeof(struct region));
+	// new->heap->vbase = old->heap->vbase;
+	// new->heap->npages = old->heap->npages;
+	// new->heap->readable = old->heap->readable;
+	// new->heap->writeable = old->heap->writeable;
+	// new->heap->executable = old->heap->executable;
+	// new->heap->next = NULL;
 
 	*ret = new;
 	return 0;

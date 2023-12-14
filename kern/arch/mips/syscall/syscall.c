@@ -141,6 +141,10 @@ syscall(struct trapframe *tf)
 		err = sys_getpid(&retval);
 		break;
 
+		// case SYS_sbrk:
+		// err = sys_sbrk((intptr_t) tf->tf_a0, &retval);
+		// break;
+
 	    /* file calls */
 
 	    case SYS_open:

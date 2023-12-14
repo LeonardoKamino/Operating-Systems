@@ -71,6 +71,8 @@ __DEAD void sys__exit(int code);
 int sys_waitpid(pid_t pid, userptr_t returncode, int flags, pid_t *retval);
 int sys_getpid(pid_t *retval);
 
+int sys_sbrk(intptr_t amount, int32_t *retval);
+
 int sys_open(const_userptr_t filename, int flags, mode_t mode, int *retval);
 int sys_dup2(int oldfd, int newfd, int *retval);
 int sys_close(int fd);
