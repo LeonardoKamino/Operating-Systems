@@ -49,9 +49,11 @@ struct spinlock cm_lock;
 
 void coremap_init()
 {
-	paddr_t ramsize = ram_getsize(); // Get the size of physical memory
+	/* Get the size of physical memory*/
+	paddr_t ramsize = ram_getsize();
 
-	coremap_pages = ramsize / PAGE_SIZE; // Calculate number of pages that fits in physical memory
+	/* Calculate number of pages that fits in physical memory */
+	coremap_pages = ramsize / PAGE_SIZE; 
 	
 
 	paddr_t firstpaddr = ram_getfirstfree();
@@ -60,7 +62,7 @@ void coremap_init()
 
 	spinlock_init(&cm_lock);
 	
-	/* Initiate entries for coremap */
+	/* Initialize entries for coremap */
 	struct cm_entry cm_entry;
 	for (int i = 0; i < coremap_pages; i++)
 	{
@@ -69,7 +71,7 @@ void coremap_init()
 		memmove(&cm.cm_entries[i], &cm_entry, sizeof(cm_entry));
 	}
 
-	/* Mark pages used by kernel and coremap as used */
+	/* Mark pages used by kernel and coremap as not free */
 	uint32_t i;
 	for (i = 0; i < (firstpaddr + (coremap_pages * sizeof(struct cm_entry))) / PAGE_SIZE + 1; i++)
 	{
@@ -242,12 +244,14 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 		return EFAULT;
 	}
 
-	/* Extract the 10 most significant bits of fault address 
+	/* 
+	*  Extract the 10 most significant bits of fault address 
 	*  Used as index for 1st level page table (page directory)
 	*/
 	unsigned int msb = (faultaddress >> 22) & 0x3FF; // 0x3FF is the mask for 10 bits
 
-	/* Extract the 10 middle bits of fault address 
+	/* 
+	*  Extract the 10 middle bits of fault address 
 	*  Used as index for 2nd level page table
 	*/
 	unsigned int mid = (faultaddress >> 12) & 0x3FF; // Shift right by 12 and mask
@@ -305,7 +309,8 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 			}
 		}
 
-		/* If fault address is not within any valid region
+		/*
+		*  If fault address is not within any valid region
 		*  so no page was allocated 
 		*  return EFAULT to indicate invalid memory
 		*/
