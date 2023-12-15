@@ -76,6 +76,7 @@ struct cm_entry {
     bool is_end_malloc; // Flag to indicate if page is the last page of a malloc
 };
 
+/*Structure to keep track of used pages in physical memory*/
 struct coremap{
     struct cm_entry *cm_entries;
 };

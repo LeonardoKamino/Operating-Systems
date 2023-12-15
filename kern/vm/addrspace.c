@@ -160,13 +160,6 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 	return 0;
 }
 
-static
-void
-as_zero_region(paddr_t paddr, unsigned npages)
-{
-	bzero((void *)PADDR_TO_KVADDR(paddr), npages * PAGE_SIZE);
-}
-
 /* Make read only regions into writable */
 int
 as_prepare_load(struct addrspace *as)
@@ -175,7 +168,6 @@ as_prepare_load(struct addrspace *as)
 	while(region != NULL) {
 		if(region->writeable == 0) {
 			region->writeable = 1;
-			as_zero_region(region->vbase, region->npages);
 		}
 		region = region->next;
 	}

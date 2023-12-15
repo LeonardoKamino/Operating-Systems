@@ -208,13 +208,12 @@ void free_kpages(vaddr_t addr)
 
 void vm_tlbshootdown_all(void)
 {
-	panic("dumbvm tried to do tlb shootdown?!\n");
+	panic("vm tried to do tlb shootdown and it is not implemented\n");
 }
 
 void vm_tlbshootdown(const struct tlbshootdown *ts)
 {
 	(void)ts;
-	panic("dumbvm tried to do tlb shootdown?!\n");
 }
 
 int vm_fault(int faulttype, vaddr_t faultaddress)
@@ -227,13 +226,9 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 
 	faultaddress &= PAGE_FRAME;
 
-	DEBUG(DB_VM, "dumbvm: fault: 0x%x\n", faultaddress);
-
 	switch (faulttype)
 	{
 	case VM_FAULT_READONLY:
-		/* We always create pages read-write, so we can't get this */
-		panic("dumbvm: got VM_FAULT_READONLY\n");
 	case VM_FAULT_READ:
 	case VM_FAULT_WRITE:
 		break;
@@ -356,7 +351,6 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 		return 0;
 	}
 
-	kprintf("dumbvm: Ran out of TLB entries - cannot handle page fault\n");
 	splx(spl);
 	return EFAULT;
 }
